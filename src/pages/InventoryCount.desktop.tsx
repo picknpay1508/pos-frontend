@@ -1,358 +1,300 @@
-import { useState, useRef, useEffect } from "react";
-import { supabase } from "../lib/supabase";
-import { Html5QrcodeScanner } from "html5-qrcode";
+import { useEffect, useRef, useState } from "react";
+import { supabase } from "../lib/supabase"; // adjust path if needed
 
-const TENANT_ID = "DEV_TENANT_ID"; // temporary for dev
+const TENANT_ID = "DEV_TENANT_ID"; // keep as-is for now
 
-export default function InventoryCountDesktop() {
-    const lastScanRef = useRef<number>(0);
-    const barcodeRef = useRef<HTMLInputElement | null>(null);
-  const [barcode, setBarcode] = useState("");
-  const [product, setProduct] = useState<any>(null);
-  const [categories, setCategories] = useState<any[]>([]);
-  const [addQty, setAddQty] = useState<number>(0);
-  const [loading, setLoading] = useState(false);
-  const [showScanner, setShowScanner] = useState(false);
+type Category = {
+  id: number;
+  name: string;
+};
 
-  const [subcategories, setSubcategories] = useState<{
+type Subcategory = {
   id: number;
   name: string;
   supplier_name: string | null;
-  category_id: number | null;
-}[]>([]);
+  category_id: number;
+};
 
-useEffect(() => {
-  async function loadSubcategories() {
-    const { data, error } = await supabase
+type Product = {
+  id?: number;
+  barcode: string;
+  name: string;
+  category_id: number | null;
+  subcategory_id: number | null;
+  subcategory_name: string | null;
+  supplier_name: string | null;
+  sell_price: number | null;
+};
+
+export default function InventoryCountDesktop() {
+  const barcodeRef = useRef<HTMLInputElement | null>(null);
+  const lastScanRef = useRef<number>(0);
+
+  const [barcode, setBarcode] = useState("");
+  const [product, setProduct] = useState<Product | null>(null);
+  const [addQty, setAddQty] = useState<number>(0);
+  const [loading, setLoading] = useState(false);
+
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [subcategories, setSubcategories] = useState<Subcategory[]>([]);
+
+  /* ---------------- LOAD MASTER DATA ---------------- */
+
+  useEffect(() => {
+    supabase
+      .from("categories")
+      .select("id, name")
+      .eq("tenant_id", TENANT_ID)
+      .then(({ data }) => setCategories(data || []));
+
+    supabase
       .from("subcategories")
       .select("id, name, supplier_name, category_id")
       .eq("tenant_id", TENANT_ID)
-      .order("name");
-
-    if (error) {
-      console.error("Failed to load subcategories", error);
-      return;
-    }
-
-    setSubcategories(data || []);
-  }
-
-  loadSubcategories();
-}, []);
-
-
-const subcategoryById = new Map(
-  subcategories.map((s) => [s.id, s])
-);
-
-const beepRef = useRef<HTMLAudioElement | null>(null);
-
-
-  useEffect(() => {
-    supabase.from("categories").select("*").then(({ data }) => {
-      setCategories(data || []);
-    });
+      .then(({ data }) => setSubcategories(data || []));
   }, []);
 
-  useEffect(() => {
-  if (!showScanner) return;
+  /* ---------------- BARCODE SEARCH ---------------- */
 
-  const scanner = new Html5QrcodeScanner(
-    "qr-reader",
-    {
-      fps: 10,
-      qrbox: { width: 250, height: 150 },
-    },
-    false
-  );
+  async function fetchProduct(code: string) {
+    const now = Date.now();
+    if (now - lastScanRef.current < 500) return;
+    lastScanRef.current = now;
 
-  scanner.render(
-    (decodedText) => {
-      setBarcode(decodedText);
-      fetchProduct(decodedText);
-      scanner.clear();
-      setShowScanner(false);
-    },
-    () => {}
-  );
+    setProduct(null);
 
-  return () => {
-    scanner.clear().catch(() => {});
-  };
-}, [showScanner]);
+    const { data } = await supabase
+      .from("products")
+      .select("*")
+      .eq("barcode", code)
+      .eq("tenant_id", TENANT_ID)
+      .single();
 
-
- async function fetchProduct(code: string) {
-  setProduct(null);
-
-  const now = Date.now();
-  if (now - lastScanRef.current < 500) return;
-  lastScanRef.current = now;
-
-  const { data } = await supabase
-    .from("products")
-    .select("*")
-    .eq("barcode", code)
-    .single();
-
-  if (data) {
-    setProduct(data);
-    // DO NOT load subcategories here
-  } else {
-    setProduct({
-      barcode: code,
-      name: "",
-      category_id: null,
-      subcategory_id: null,
-      subcategory_name: null,
-      supplier_name: null,
-      sell_price: null
-    });
+    if (data) {
+      setProduct({
+        id: data.id,
+        barcode: data.barcode,
+        name: data.name,
+        category_id: data.category_id,
+        subcategory_id: data.subcategory_id,
+        subcategory_name: data.subcategory_name,
+        supplier_name: data.supplier_name,
+        sell_price: data.sell_price,
+      });
+    } else {
+      setProduct({
+        barcode: code,
+        name: "",
+        category_id: null,
+        subcategory_id: null,
+        subcategory_name: null,
+        supplier_name: null,
+        sell_price: null,
+      });
+    }
   }
-}
 
+  /* ---------------- SAVE INVENTORY ---------------- */
 
- 
   async function saveAndAddInventory() {
     if (!product || addQty <= 0) return;
 
     setLoading(true);
 
-  let productId = product.id;
-
-if (!productId) {
-  const { data: newProduct, error } = await supabase
-    .from("products")
-    .insert({
+    const productPayload = {
       tenant_id: TENANT_ID,
       barcode: product.barcode,
       name: product.name,
       category_id: product.category_id,
       subcategory_id: product.subcategory_id,
+      subcategory_name: product.subcategory_name,
+      supplier_name: product.supplier_name,
       sell_price: product.sell_price,
-      is_active: true
-    })
-    .select()
-    .single();
+      is_active: true,
+    };
 
-  if (error) {
-    alert("Failed to create product");
+    let productId = product.id;
+
+    if (!productId) {
+      const { data, error } = await supabase
+        .from("products")
+        .insert(productPayload)
+        .select("id")
+        .single();
+
+      if (error) {
+        alert("Failed to create product");
+        setLoading(false);
+        return;
+      }
+
+      productId = data.id;
+    } else {
+      const { error } = await supabase
+        .from("products")
+        .update(productPayload)
+        .eq("id", productId)
+        .eq("tenant_id", TENANT_ID);
+
+      if (error) {
+        alert("Failed to update product");
+        setLoading(false);
+        return;
+      }
+    }
+
+    await supabase.from("inventory_adjustments").insert({
+      tenant_id: TENANT_ID,
+      product_id: productId,
+      qty_added: addQty,
+      reason: "stock_count",
+    });
+
+    setBarcode("");
+    setProduct(null);
+    setAddQty(0);
+
+    setTimeout(() => barcodeRef.current?.focus(), 50);
     setLoading(false);
-    return;
   }
 
-  productId = newProduct.id;
-}
+  /* ---------------- UI ---------------- */
 
-   setBarcode("");
-setProduct(null);
-setAddQty(0);
+  return (
+    <div
+      style={{
+        maxWidth: 520,
+        margin: "40px auto",
+        background: "#fff",
+        padding: 24,
+        borderRadius: 10,
+        boxShadow: "0 4px 20px rgba(0,0,0,0.1)",
+      }}
+    >
+      <h2 style={{ marginBottom: 16 }}>Inventory Stock Count</h2>
 
-setTimeout(() => {
-  barcodeRef.current?.focus();
-}, 50);
-
-await supabase
-  .from("inventory_adjustments")
-  .insert({
-    tenant_id: TENANT_ID,
-    product_id: productId,
-    qty_added: addQty,
-    reason: "stock_count"
-  });
-
-setBarcode("");
-setProduct(null);
-setAddQty(0);
-
-setTimeout(() => {
-  barcodeRef.current?.focus();
-}, 50);
-
-setLoading(false);
-
-  }
-return (
-  <div style={{ padding: 24, maxWidth: 600 }}>
-    
-    <audio ref={beepRef} src="/beep.mp3" preload="auto" />
-
-    <h2>Inventory Stock Count</h2>
-
-    <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+      {/* BARCODE */}
       <input
-        placeholder="Scan or enter barcode"
+        ref={barcodeRef}
+        placeholder="Scan barcode"
         value={barcode}
         onChange={(e) => setBarcode(e.target.value)}
         onKeyDown={(e) => e.key === "Enter" && fetchProduct(barcode)}
-        style={{ flex: 1, padding: 8 }}
+        style={{ width: "100%", padding: 12, fontSize: 16 }}
       />
 
-
-  <button onClick={() => setShowScanner(true)}>
-    Scan
-  </button>
-</div>
-
-{showScanner && (
-  <div
-    style={{
-      position: "fixed",
-      inset: 0,
-      background: "#000000cc",
-      zIndex: 9999,
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      flexDirection: "column",
-    }}
-  >
-    <div id="qr-reader" style={{ width: 300 }} />
-
-    <button
-      onClick={() => setShowScanner(false)}
-      style={{ marginTop: 12, padding: 10 }}
-    >
-      Close
-    </button>
-  </div>
-)}
-
-
       {product && (
-        <div style={{ border: "1px solid #ccc", padding: 16 }}>
-          <div>
-            <label>Product Name</label>
-            <input
-              value={product.name}
-              onChange={(e) =>
-                setProduct({ ...product, name: e.target.value })
-              }
-            />
-          </div>
-<label style={{ display: "block", marginTop: 10 }}>
-  Subcategory (includes supplier)
-</label>
+        <>
+          {/* PRODUCT NAME */}
+          <input
+            placeholder="Product name"
+            value={product.name}
+            onChange={(e) =>
+              setProduct({ ...product, name: e.target.value })
+            }
+            style={{ width: "100%", padding: 10, marginTop: 12 }}
+          />
 
-<select
-  value={product?.subcategory_id ?? ""}
-  onChange={(e) => {
-    const selectedId = e.target.value
-      ? Number(e.target.value)
-      : null;
+          {/* CATEGORY */}
+          <select
+            value={product.category_id ?? ""}
+            onChange={(e) =>
+              setProduct({
+                ...product,
+                category_id: Number(e.target.value),
+                subcategory_id: null,
+                subcategory_name: null,
+                supplier_name: null,
+              })
+            }
+            style={{ width: "100%", padding: 10, marginTop: 12 }}
+          >
+            <option value="">Select category</option>
+            {categories.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
 
-    const selectedSubcategory = selectedId
-      ? subcategoryById.get(selectedId)
-      : null;
-
-    setProduct((prev: any) => {
-      if (!prev) return prev;
-
-      if (!selectedSubcategory) {
-        return {
-          ...prev,
-          subcategory_id: null
-        };
-      }
-
-      return {
-        ...prev,
-        subcategory_id: selectedSubcategory.id,
-
-        // SNAPSHOTS (LOCKED)
-        subcategory_name: selectedSubcategory.name,
-        supplier_name: selectedSubcategory.supplier_name
-      };
-    });
-  }}
-  style={{ width: "100%", padding: 8 }}
->
-  <option value="">-- Select subcategory --</option>
-
-  {subcategories.map((sc) => (
-    <option key={sc.id} value={sc.id}>
-      {sc.name} — {sc.supplier_name}
-    </option>
-  ))}
-</select>
-
-          <div>
-            <label>Category</label>
+          {/* SUBCATEGORY */}
+          {product.category_id && (
             <select
-              value={product.category_id}
+              value={product.subcategory_id ?? ""}
               onChange={(e) => {
+                const sc = subcategories.find(
+                  (s) => s.id === Number(e.target.value)
+                );
+                if (!sc) return;
+
                 setProduct({
                   ...product,
-                  category_id: e.target.value,
-                  subcategory_id: ""
+                  subcategory_id: sc.id,
+                  subcategory_name: sc.name,
+                  supplier_name: sc.supplier_name,
                 });
-                
               }}
+              style={{ width: "100%", padding: 10, marginTop: 12 }}
             >
-              <option value="">Select</option>
-              {categories.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
+              <option value="">Select subcategory (supplier)</option>
+              {subcategories
+                .filter((s) => s.category_id === product.category_id)
+                .map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name} — {s.supplier_name}
+                  </option>
+                ))}
             </select>
-          </div>
+          )}
 
-          <div>
-            <label>Subcategory</label>
-            <select
-              value={product.subcategory_id}
-              onChange={(e) =>
-                setProduct({
-                  ...product,
-                  subcategory_id: e.target.value
-                })
-              }
-            >
-              <option value="">Select</option>
-              {subcategories.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
-          </div>
+          {/* SELL PRICE */}
+          <input
+            type="number"
+            placeholder="Sell price"
+            value={product.sell_price ?? ""}
+            onChange={(e) =>
+              setProduct({
+                ...product,
+                sell_price: Number(e.target.value),
+              })
+            }
+            style={{ width: "100%", padding: 10, marginTop: 12 }}
+          />
 
-          <div>
-            <label>Sell Price</label>
-            <input
-              type="number"
-              value={product.sell_price}
-              onChange={(e) =>
-                setProduct({
-                  ...product,
-                  sell_price: Number(e.target.value)
-                })
-              }
-            />
-          </div>
-
-          <div style={{ marginTop: 8 }}>
-            <strong>Current Quantity:</strong> {product.quantity || 0}
-          </div>
-
-          <div>
-            <label>Add Quantity</label>
-            <input
-              type="number"
-              value={addQty}
-              onChange={(e) => setAddQty(Number(e.target.value))}
-            />
-          </div>
+          {/* ADD QTY */}
+          <input
+            type="number"
+            placeholder="Add quantity"
+            value={addQty}
+            onChange={(e) => setAddQty(Number(e.target.value))}
+            style={{
+              width: "100%",
+              padding: 14,
+              marginTop: 14,
+              fontSize: 18,
+              textAlign: "center",
+              fontWeight: "bold",
+            }}
+          />
 
           <button
             onClick={saveAndAddInventory}
             disabled={loading}
-            style={{ marginTop: 12 }}
+            style={{
+              width: "100%",
+              marginTop: 18,
+              padding: 14,
+              fontSize: 18,
+              background: "#0f766e",
+              color: "#fff",
+              border: "none",
+              borderRadius: 6,
+              cursor: "pointer",
+            }}
           >
             {loading ? "Saving..." : "Save & Add Inventory"}
           </button>
-        </div>
+        </>
       )}
     </div>
   );
