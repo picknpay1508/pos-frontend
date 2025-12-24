@@ -82,42 +82,37 @@ const beepRef = useRef<HTMLAudioElement | null>(null);
 }, [showScanner]);
 
 
-  async function fetchProduct(code: string) {
-    setProduct(null);
-const now = Date.now();
-if (now - lastScanRef.current < 500) return;
-lastScanRef.current = now;
+ async function fetchProduct(code: string) {
+  setProduct(null);
 
-    const { data } = await supabase
-      .from("products")
-      .select("*")
-      .eq("barcode", code)
-      .single();
+  const now = Date.now();
+  if (now - lastScanRef.current < 500) return;
+  lastScanRef.current = now;
 
-    if (data) {
-      setProduct(data);
-      loadSubcategories(data.category_id);
-    } else {
-      setProduct({
-        barcode: code,
-        name: "",
-        category_id: "",
-        subcategory_id: "",
-        sell_price: "",
-        quantity: 0
-      });
-    }
+  const { data } = await supabase
+    .from("products")
+    .select("*")
+    .eq("barcode", code)
+    .single();
+
+  if (data) {
+    setProduct(data);
+    // DO NOT load subcategories here
+  } else {
+    setProduct({
+      barcode: code,
+      name: "",
+      category_id: null,
+      subcategory_id: null,
+      subcategory_name: null,
+      supplier_name: null,
+      sell_price: null
+    });
   }
+}
 
-  async function loadSubcategories(categoryId: string) {
-    const { data } = await supabase
-      .from("subcategories")
-      .select("*")
-      .eq("category_id", categoryId);
 
-    setSubcategories(data || []);
-  }
-
+ 
   async function saveAndAddInventory() {
     if (!product || addQty <= 0) return;
 
@@ -291,7 +286,7 @@ return (
                   category_id: e.target.value,
                   subcategory_id: ""
                 });
-                loadSubcategories(e.target.value);
+                
               }}
             >
               <option value="">Select</option>
