@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
+import { Html5QrcodeScanner } from "html5-qrcode";
 
 const TENANT_ID = "DEV_TENANT_ID"; // temporary for dev
 
@@ -10,12 +11,42 @@ export default function InventoryCount() {
   const [subcategories, setSubcategories] = useState<any[]>([]);
   const [addQty, setAddQty] = useState<number>(0);
   const [loading, setLoading] = useState(false);
+  const [showScanner, setShowScanner] = useState(false);
+
 
   useEffect(() => {
     supabase.from("categories").select("*").then(({ data }) => {
       setCategories(data || []);
     });
   }, []);
+
+  useEffect(() => {
+  if (!showScanner) return;
+
+  const scanner = new Html5QrcodeScanner(
+    "qr-reader",
+    {
+      fps: 10,
+      qrbox: { width: 250, height: 150 },
+    },
+    false
+  );
+
+  scanner.render(
+    (decodedText) => {
+      setBarcode(decodedText);
+      fetchProduct(decodedText);
+      scanner.clear();
+      setShowScanner(false);
+    },
+    () => {}
+  );
+
+  return () => {
+    scanner.clear().catch(() => {});
+  };
+}, [showScanner]);
+
 
   async function fetchProduct(code: string) {
     setProduct(null);
@@ -91,13 +122,44 @@ export default function InventoryCount() {
     <div style={{ padding: 24, maxWidth: 600 }}>
       <h2>Inventory Stock Count</h2>
 
-      <input
-        placeholder="Scan or enter barcode"
-        value={barcode}
-        onChange={(e) => setBarcode(e.target.value)}
-        onKeyDown={(e) => e.key === "Enter" && fetchProduct(barcode)}
-        style={{ width: "100%", padding: 8, marginBottom: 12 }}
-      />
+      <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+  <input
+    placeholder="Scan or enter barcode"
+    value={barcode}
+    onChange={(e) => setBarcode(e.target.value)}
+    onKeyDown={(e) => e.key === "Enter" && fetchProduct(barcode)}
+    style={{ flex: 1, padding: 8 }}
+  />
+
+  <button onClick={() => setShowScanner(true)}>
+    Scan
+  </button>
+</div>
+
+{showScanner && (
+  <div
+    style={{
+      position: "fixed",
+      inset: 0,
+      background: "#000000cc",
+      zIndex: 9999,
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      flexDirection: "column",
+    }}
+  >
+    <div id="qr-reader" style={{ width: 300 }} />
+
+    <button
+      onClick={() => setShowScanner(false)}
+      style={{ marginTop: 12, padding: 10 }}
+    >
+      Close
+    </button>
+  </div>
+)}
+
 
       {product && (
         <div style={{ border: "1px solid #ccc", padding: 16 }}>
