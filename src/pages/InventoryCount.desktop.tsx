@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { supabase } from "../lib/supabase"; // adjust path if needed
+import { supabase } from "../lib/supabase";
 
-const TENANT_ID = "DEV_TENANT_ID"; // keep as-is for now
+const TENANT_ID = "DEV_TENANT_ID";
 
 type Category = {
   id: number;
@@ -38,24 +38,22 @@ export default function InventoryCountDesktop() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [subcategories, setSubcategories] = useState<Subcategory[]>([]);
 
-  /* ---------------- LOAD MASTER DATA ---------------- */
-
+  /* ---------- LOAD MASTER DATA ---------- */
   useEffect(() => {
     supabase
       .from("categories")
-      .select("id, name")
+      .select("id,name")
       .eq("tenant_id", TENANT_ID)
       .then(({ data }) => setCategories(data || []));
 
     supabase
       .from("subcategories")
-      .select("id, name, supplier_name, category_id")
+      .select("id,name,supplier_name,category_id")
       .eq("tenant_id", TENANT_ID)
       .then(({ data }) => setSubcategories(data || []));
   }, []);
 
-  /* ---------------- BARCODE SEARCH ---------------- */
-
+  /* ---------- BARCODE SEARCH ---------- */
   async function fetchProduct(code: string) {
     const now = Date.now();
     if (now - lastScanRef.current < 500) return;
@@ -94,14 +92,13 @@ export default function InventoryCountDesktop() {
     }
   }
 
-  /* ---------------- SAVE INVENTORY ---------------- */
-
+  /* ---------- SAVE INVENTORY ---------- */
   async function saveAndAddInventory() {
     if (!product || addQty <= 0) return;
 
     setLoading(true);
 
-    const productPayload = {
+    const payload = {
       tenant_id: TENANT_ID,
       barcode: product.barcode,
       name: product.name,
@@ -118,7 +115,7 @@ export default function InventoryCountDesktop() {
     if (!productId) {
       const { data, error } = await supabase
         .from("products")
-        .insert(productPayload)
+        .insert(payload)
         .select("id")
         .single();
 
@@ -132,7 +129,7 @@ export default function InventoryCountDesktop() {
     } else {
       const { error } = await supabase
         .from("products")
-        .update(productPayload)
+        .update(payload)
         .eq("id", productId)
         .eq("tenant_id", TENANT_ID);
 
@@ -153,13 +150,11 @@ export default function InventoryCountDesktop() {
     setBarcode("");
     setProduct(null);
     setAddQty(0);
-
     setTimeout(() => barcodeRef.current?.focus(), 50);
     setLoading(false);
   }
 
-  /* ---------------- UI ---------------- */
-
+  /* ---------- UI ---------- */
   return (
     <div
       style={{
@@ -173,7 +168,6 @@ export default function InventoryCountDesktop() {
     >
       <h2 style={{ marginBottom: 16 }}>Inventory Stock Count</h2>
 
-      {/* BARCODE */}
       <input
         ref={barcodeRef}
         placeholder="Scan barcode"
@@ -185,7 +179,6 @@ export default function InventoryCountDesktop() {
 
       {product && (
         <>
-          {/* PRODUCT NAME */}
           <input
             placeholder="Product name"
             value={product.name}
@@ -195,7 +188,6 @@ export default function InventoryCountDesktop() {
             style={{ width: "100%", padding: 10, marginTop: 12 }}
           />
 
-          {/* CATEGORY */}
           <select
             value={product.category_id ?? ""}
             onChange={(e) =>
@@ -217,7 +209,6 @@ export default function InventoryCountDesktop() {
             ))}
           </select>
 
-          {/* SUBCATEGORY */}
           {product.category_id && (
             <select
               value={product.subcategory_id ?? ""}
@@ -247,7 +238,6 @@ export default function InventoryCountDesktop() {
             </select>
           )}
 
-          {/* SELL PRICE */}
           <input
             type="number"
             placeholder="Sell price"
@@ -261,7 +251,6 @@ export default function InventoryCountDesktop() {
             style={{ width: "100%", padding: 10, marginTop: 12 }}
           />
 
-          {/* ADD QTY */}
           <input
             type="number"
             placeholder="Add quantity"
