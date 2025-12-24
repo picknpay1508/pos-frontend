@@ -179,19 +179,7 @@ setLoading(false);
   }
 return (
   <div style={{ padding: 24, maxWidth: 600 }}>
-    <div style={{ marginBottom: 16 }}>
-  <button
-    onClick={() => (window.location.href = "/InventoryCount")}
-    style={{ marginRight: 8 }}
-  >
-    Inventory
-  </button>
-
-  <button onClick={() => (window.location.href = "/CategoryAdmin")}>
-    Categories
-  </button>
-</div>
-
+    
     <audio ref={beepRef} src="/beep.mp3" preload="auto" />
 
     <h2>Inventory Stock Count</h2>

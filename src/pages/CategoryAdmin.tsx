@@ -126,20 +126,9 @@ loadCategories();
     loadCategories();
   };
 
-  return (
+  return  (
     <div style={{ display: "flex", gap: 40, padding: 20 }}>
-        <div style={{ marginBottom: 16 }}>
-  <button
-    onClick={() => (window.location.href = "/InventoryCount")}
-    style={{ marginRight: 8 }}
-  >
-    Inventory
-  </button>
-
-  <button onClick={() => (window.location.href = "/CategoryAdmin")}>
-    Categories
-  </button>
-</div>
+      
 
       {/* LEFT SIDE — FORMS */}
       <div style={{ width: 500 }}>
