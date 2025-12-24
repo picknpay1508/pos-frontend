@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "../lib/supabase";
 
-const TENANT_ID = "DEV_TENANT_ID";
+const TENANT_ID = "c1feb59d-ac1d-4ab4-b2b2-f679be78cffb";
 
 type Category = {
   id: number;
@@ -38,22 +38,30 @@ export default function InventoryCountDesktop() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [subcategories, setSubcategories] = useState<Subcategory[]>([]);
 
-  /* ---------- LOAD MASTER DATA ---------- */
+  /* ================= LOAD MASTER DATA ================= */
+
   useEffect(() => {
     supabase
       .from("categories")
-      .select("id,name")
+      .select("id, name")
       .eq("tenant_id", TENANT_ID)
-      .then(({ data }) => setCategories(data || []));
+      .order("name")
+      .then(({ data }) => {
+        setCategories(data || []);
+      });
 
     supabase
       .from("subcategories")
-      .select("id,name,supplier_name,category_id")
+      .select("id, name, supplier_name, category_id")
       .eq("tenant_id", TENANT_ID)
-      .then(({ data }) => setSubcategories(data || []));
+      .order("name")
+      .then(({ data }) => {
+        setSubcategories(data || []);
+      });
   }, []);
 
-  /* ---------- BARCODE SEARCH ---------- */
+  /* ================= BARCODE SEARCH ================= */
+
   async function fetchProduct(code: string) {
     const now = Date.now();
     if (now - lastScanRef.current < 500) return;
@@ -92,7 +100,8 @@ export default function InventoryCountDesktop() {
     }
   }
 
-  /* ---------- SAVE INVENTORY ---------- */
+  /* ================= SAVE INVENTORY ================= */
+
   async function saveAndAddInventory() {
     if (!product || addQty <= 0) return;
 
@@ -150,11 +159,13 @@ export default function InventoryCountDesktop() {
     setBarcode("");
     setProduct(null);
     setAddQty(0);
+
     setTimeout(() => barcodeRef.current?.focus(), 50);
     setLoading(false);
   }
 
-  /* ---------- UI ---------- */
+  /* ================= UI ================= */
+
   return (
     <div
       style={{
@@ -168,6 +179,7 @@ export default function InventoryCountDesktop() {
     >
       <h2 style={{ marginBottom: 16 }}>Inventory Stock Count</h2>
 
+      {/* BARCODE */}
       <input
         ref={barcodeRef}
         placeholder="Scan barcode"
@@ -179,6 +191,7 @@ export default function InventoryCountDesktop() {
 
       {product && (
         <>
+          {/* PRODUCT NAME */}
           <input
             placeholder="Product name"
             value={product.name}
@@ -188,6 +201,8 @@ export default function InventoryCountDesktop() {
             style={{ width: "100%", padding: 10, marginTop: 12 }}
           />
 
+          {/* CATEGORY */}
+          <label style={{ marginTop: 12, display: "block" }}>Category</label>
           <select
             value={product.category_id ?? ""}
             onChange={(e) =>
@@ -199,7 +214,7 @@ export default function InventoryCountDesktop() {
                 supplier_name: null,
               })
             }
-            style={{ width: "100%", padding: 10, marginTop: 12 }}
+            style={{ width: "100%", padding: 10, marginTop: 6 }}
           >
             <option value="">Select category</option>
             {categories.map((c) => (
@@ -209,35 +224,43 @@ export default function InventoryCountDesktop() {
             ))}
           </select>
 
+          {/* SUBCATEGORY */}
           {product.category_id && (
-            <select
-              value={product.subcategory_id ?? ""}
-              onChange={(e) => {
-                const sc = subcategories.find(
-                  (s) => s.id === Number(e.target.value)
-                );
-                if (!sc) return;
+            <>
+              <label style={{ marginTop: 12, display: "block" }}>
+                Subcategory (includes supplier)
+              </label>
+              <select
+                value={product.subcategory_id ?? ""}
+                onChange={(e) => {
+                  const sc = subcategories.find(
+                    (s) => s.id === Number(e.target.value)
+                  );
+                  if (!sc) return;
 
-                setProduct({
-                  ...product,
-                  subcategory_id: sc.id,
-                  subcategory_name: sc.name,
-                  supplier_name: sc.supplier_name,
-                });
-              }}
-              style={{ width: "100%", padding: 10, marginTop: 12 }}
-            >
-              <option value="">Select subcategory (supplier)</option>
-              {subcategories
-                .filter((s) => s.category_id === product.category_id)
-                .map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name} — {s.supplier_name}
-                  </option>
-                ))}
-            </select>
+                  setProduct({
+                    ...product,
+                    subcategory_id: sc.id,
+                    subcategory_name: sc.name,
+                    supplier_name: sc.supplier_name,
+                  });
+                }}
+                style={{ width: "100%", padding: 10, marginTop: 6 }}
+              >
+                <option value="">Select subcategory (supplier)</option>
+                {subcategories
+                  .filter((s) => s.category_id === product.category_id)
+                  .map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name} — {s.supplier_name}
+                    </option>
+                  ))}
+              </select>
+            </>
           )}
 
+          {/* SELL PRICE */}
+          <label style={{ marginTop: 12, display: "block" }}>Sell price</label>
           <input
             type="number"
             placeholder="Sell price"
@@ -248,18 +271,21 @@ export default function InventoryCountDesktop() {
                 sell_price: Number(e.target.value),
               })
             }
-            style={{ width: "100%", padding: 10, marginTop: 12 }}
+            style={{ width: "100%", padding: 10, marginTop: 6 }}
           />
 
+          {/* ADD QTY */}
+          <label style={{ marginTop: 14, display: "block" }}>
+            Add quantity
+          </label>
           <input
             type="number"
-            placeholder="Add quantity"
             value={addQty}
             onChange={(e) => setAddQty(Number(e.target.value))}
             style={{
               width: "100%",
               padding: 14,
-              marginTop: 14,
+              marginTop: 6,
               fontSize: 18,
               textAlign: "center",
               fontWeight: "bold",
