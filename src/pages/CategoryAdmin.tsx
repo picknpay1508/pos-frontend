@@ -8,7 +8,9 @@ const TENANT_ID = "c1feb59d-ac1d-4ab4-b2b2-f679be78cffb";
 type Subcategory = {
   id: string;
   name: string;
+  supplier_name: string | null;
 };
+
 
 type Category = {
   id: string;
@@ -71,7 +73,7 @@ const [sizeValue, setSizeValue] = useState("");
       return;
     }
 
-    await supabase.from("categories").insert({
+  const { error } = await supabase.from("categories").insert({
   tenant_id: TENANT_ID,
   name,
   gst_rate: gst,
@@ -79,11 +81,11 @@ const [sizeValue, setSizeValue] = useState("");
   is_active: true,
 });
 
+if (error) {
+  alert(error.message);
+  return;
+}
 
-    if (error) {
-      alert(error.message);
-      return;
-    }
 
     setName("");
     setGst(5);
@@ -231,10 +233,8 @@ loadCategories();
           c.subcategories.map((s) => (
             <li key={s.id}>
               {s.name}
-              {s.supplier_name && ` — ${s.supplier_name}`}
-              {s.size_label && s.size_value
-                ? ` (${s.size_label}: ${s.size_value})`
-                : ""}
+{s.supplier_name && ` — ${s.supplier_name}`}
+
             </li>
           ))
         ) : (
