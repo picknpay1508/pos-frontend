@@ -1,5 +1,7 @@
-import InventoryCount from "./pages/InventoryCount";
+import CategoryAdmin from "./pages/CategoryAdmin";
 
-export default function App() {
-  return <InventoryCount />;
+function App() {
+  return <CategoryAdmin />;
 }
+
+export default App;
