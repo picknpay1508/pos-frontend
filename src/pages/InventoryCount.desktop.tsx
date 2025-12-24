@@ -4,23 +4,23 @@ import { supabase } from "../lib/supabase";
 const TENANT_ID = "c1feb59d-ac1d-4ab4-b2b2-f679be78cffb";
 
 type Category = {
-  id: number;
+  id: string;
   name: string;
 };
 
 type Subcategory = {
-  id: number;
+  id: string;
   name: string;
   supplier_name: string | null;
-  category_id: number;
+  category_id: string;
 };
 
 type Product = {
-  id?: number;
+  id?: string;
   barcode: string;
   name: string;
-  category_id: number | null;
-  subcategory_id: number | null;
+  category_id: string | null;
+  subcategory_id: string | null;
   subcategory_name: string | null;
   supplier_name: string | null;
   sell_price: number | null;
@@ -38,30 +38,24 @@ export default function InventoryCountDesktop() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [subcategories, setSubcategories] = useState<Subcategory[]>([]);
 
-  /* ================= LOAD MASTER DATA ================= */
-
+  /* ---------- LOAD MASTER DATA ---------- */
   useEffect(() => {
     supabase
       .from("categories")
       .select("id, name")
       .eq("tenant_id", TENANT_ID)
       .order("name")
-      .then(({ data }) => {
-        setCategories(data || []);
-      });
+      .then(({ data }) => setCategories(data || []));
 
     supabase
       .from("subcategories")
       .select("id, name, supplier_name, category_id")
       .eq("tenant_id", TENANT_ID)
       .order("name")
-      .then(({ data }) => {
-        setSubcategories(data || []);
-      });
+      .then(({ data }) => setSubcategories(data || []));
   }, []);
 
-  /* ================= BARCODE SEARCH ================= */
-
+  /* ---------- BARCODE SEARCH ---------- */
   async function fetchProduct(code: string) {
     const now = Date.now();
     if (now - lastScanRef.current < 500) return;
@@ -100,8 +94,7 @@ export default function InventoryCountDesktop() {
     }
   }
 
-  /* ================= SAVE INVENTORY ================= */
-
+  /* ---------- SAVE INVENTORY ---------- */
   async function saveAndAddInventory() {
     if (!product || addQty <= 0) return;
 
@@ -159,13 +152,11 @@ export default function InventoryCountDesktop() {
     setBarcode("");
     setProduct(null);
     setAddQty(0);
-
     setTimeout(() => barcodeRef.current?.focus(), 50);
     setLoading(false);
   }
 
-  /* ================= UI ================= */
-
+  /* ---------- UI ---------- */
   return (
     <div
       style={{
@@ -179,7 +170,6 @@ export default function InventoryCountDesktop() {
     >
       <h2 style={{ marginBottom: 16 }}>Inventory Stock Count</h2>
 
-      {/* BARCODE */}
       <input
         ref={barcodeRef}
         placeholder="Scan barcode"
@@ -191,7 +181,6 @@ export default function InventoryCountDesktop() {
 
       {product && (
         <>
-          {/* PRODUCT NAME */}
           <input
             placeholder="Product name"
             value={product.name}
@@ -201,14 +190,13 @@ export default function InventoryCountDesktop() {
             style={{ width: "100%", padding: 10, marginTop: 12 }}
           />
 
-          {/* CATEGORY */}
           <label style={{ marginTop: 12, display: "block" }}>Category</label>
           <select
             value={product.category_id ?? ""}
             onChange={(e) =>
               setProduct({
                 ...product,
-                category_id: Number(e.target.value),
+                category_id: e.target.value || null,
                 subcategory_id: null,
                 subcategory_name: null,
                 supplier_name: null,
@@ -224,7 +212,6 @@ export default function InventoryCountDesktop() {
             ))}
           </select>
 
-          {/* SUBCATEGORY */}
           {product.category_id && (
             <>
               <label style={{ marginTop: 12, display: "block" }}>
@@ -234,7 +221,7 @@ export default function InventoryCountDesktop() {
                 value={product.subcategory_id ?? ""}
                 onChange={(e) => {
                   const sc = subcategories.find(
-                    (s) => s.id === Number(e.target.value)
+                    (s) => s.id === e.target.value
                   );
                   if (!sc) return;
 
@@ -259,22 +246,16 @@ export default function InventoryCountDesktop() {
             </>
           )}
 
-          {/* SELL PRICE */}
           <label style={{ marginTop: 12, display: "block" }}>Sell price</label>
           <input
             type="number"
-            placeholder="Sell price"
             value={product.sell_price ?? ""}
             onChange={(e) =>
-              setProduct({
-                ...product,
-                sell_price: Number(e.target.value),
-              })
+              setProduct({ ...product, sell_price: Number(e.target.value) })
             }
             style={{ width: "100%", padding: 10, marginTop: 6 }}
           />
 
-          {/* ADD QTY */}
           <label style={{ marginTop: 14, display: "block" }}>
             Add quantity
           </label>
