@@ -176,11 +176,6 @@ export default function InventoryCountDesktop() {
       return;
     }
 
-    if (addQty <= 0) {
-      alert("Quantity must be greater than 0.");
-      return;
-    }
-
     setLoading(true);
 
     const payload = {
@@ -218,12 +213,15 @@ export default function InventoryCountDesktop() {
       await supabase.from("products").update(payload).eq("id", productId);
     }
 
-    const newQty = product.quantity + addQty;
+    if (addQty > 0) {
+  const newQty = product.quantity + addQty;
 
-    await supabase
-      .from("products")
-      .update({ quantity: newQty })
-      .eq("id", productId);
+  await supabase
+    .from("products")
+    .update({ quantity: newQty })
+    .eq("id", productId);
+}
+
 
     setBarcode("");
     setProduct(null);
@@ -380,10 +378,22 @@ export default function InventoryCountDesktop() {
           />
 
           <button
-            onClick={saveAndAddInventory}
-            disabled={loading}
-            style={{ width: "100%", marginTop: 16, padding: 14 }}
-          >
+  onClick={saveAndAddInventory}
+  disabled={loading}
+  style={{
+    width: "100%",
+    marginTop: 20,
+    padding: "16px 0",
+    fontSize: 18,
+    fontWeight: 600,
+    backgroundColor: loading ? "#9ca3af" : "#16a34a",
+    color: "#fff",
+    border: "none",
+    borderRadius: 8,
+    cursor: loading ? "not-allowed" : "pointer",
+  }}
+>
+
             {loading ? "Saving..." : "Save & Add Inventory"}
           </button>
         </>
