@@ -21,7 +21,7 @@ type Product = {
   id?: string;
   barcode: string;
 
-  // Brand (existing column)
+  // Brand (required)
   name: string;
 
   // Optional
@@ -186,20 +186,15 @@ export default function InventoryCountDesktop() {
     const payload = {
       tenant_id: TENANT_ID,
       barcode: product.barcode,
-
       name: product.name,
       model: product.model,
-
       category_id: product.category_id,
       category_name: categoryById.get(product.category_id)?.name || null,
-
       subcategory_name: sc.name,
       supplier_name: sc.supplier_name,
-
       size: product.size,
       flavor: product.flavor,
       Nicotine: product.Nicotine,
-
       sell_price: product.sell_price,
       is_active: true,
     };
@@ -218,7 +213,6 @@ export default function InventoryCountDesktop() {
         setLoading(false);
         return;
       }
-
       productId = data.id;
     } else {
       await supabase.from("products").update(payload).eq("id", productId);
@@ -245,72 +239,111 @@ export default function InventoryCountDesktop() {
     <div style={{ maxWidth: 600, margin: "40px auto", padding: 24 }}>
       <h2>Inventory Stock Count</h2>
 
+      <label>Barcode</label>
       <input
         ref={barcodeRef}
-        placeholder="Scan barcode"
         value={barcode}
         onChange={(e) => setBarcode(e.target.value)}
         onKeyDown={(e) => e.key === "Enter" && fetchProduct(barcode)}
-        style={{ width: "100%", padding: 12 }}
+        style={{ width: "100%", padding: 10 }}
       />
 
       {product && (
         <>
+          <label>Brand *</label>
           <input
             list="brands"
-            placeholder="Brand (required)"
             value={product.name}
             onChange={(e) =>
               setProduct({ ...product, name: e.target.value })
             }
-            style={{ width: "100%", marginTop: 10, padding: 10 }}
+            style={{ width: "100%", padding: 10 }}
           />
-          <datalist id="brands">
-            {brandOptions.map((b) => (
-              <option key={b} value={b} />
-            ))}
-          </datalist>
 
+          <label>Model (optional)</label>
           <input
             list="models"
-            placeholder="Model (optional)"
             value={product.model || ""}
             onChange={(e) =>
               setProduct({ ...product, model: e.target.value || null })
             }
-            style={{ width: "100%", marginTop: 10, padding: 10 }}
+            style={{ width: "100%", padding: 10 }}
           />
-          <datalist id="models">
-            {modelOptions.map((m) => (
-              <option key={m} value={m} />
+
+          <label>Category *</label>
+          <select
+            value={product.category_id ?? ""}
+            onChange={(e) => {
+              setProduct({
+                ...product,
+                category_id: e.target.value || null,
+                category_name:
+                  categoryById.get(e.target.value)?.name || null,
+                subcategory_name: null,
+                supplier_name: null,
+              });
+              setSelectedSubcategoryId("");
+            }}
+            style={{ width: "100%", padding: 10 }}
+          >
+            <option value="">Select category</option>
+            {categories.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
             ))}
-          </datalist>
+          </select>
 
-          <div style={{ marginTop: 10 }}>
-            <strong>Current Qty:</strong> {product.quantity}
-          </div>
+          <label>Subcategory / Supplier *</label>
+          <select
+            value={selectedSubcategoryId}
+            onChange={(e) => {
+              const id = e.target.value;
+              setSelectedSubcategoryId(id);
+              const sc = subcategoryById.get(id);
+              if (!sc) return;
+              setProduct({
+                ...product,
+                subcategory_name: sc.name,
+                supplier_name: sc.supplier_name,
+              });
+            }}
+            style={{ width: "100%", padding: 10 }}
+          >
+            <option value="">Select subcategory</option>
+            {subcategories
+              .filter((s) => s.category_id === product.category_id)
+              .map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name} — {s.supplier_name}
+                </option>
+              ))}
+          </select>
 
+          <label>Current Quantity</label>
+          <div>{product.quantity}</div>
+
+          <label>Size</label>
           <input
-            placeholder="Size (optional)"
             value={product.size || ""}
             onChange={(e) =>
               setProduct({ ...product, size: e.target.value || null })
             }
-            style={{ width: "100%", marginTop: 10, padding: 10 }}
+            style={{ width: "100%", padding: 10 }}
           />
 
+          <label>Flavor</label>
           <input
-            placeholder="Flavor (optional)"
             value={product.flavor || ""}
             onChange={(e) =>
               setProduct({ ...product, flavor: e.target.value || null })
             }
-            style={{ width: "100%", marginTop: 10, padding: 10 }}
+            style={{ width: "100%", padding: 10 }}
           />
 
+          <label>Nicotine</label>
           <input
             type="number"
-            placeholder="Nicotine (optional)"
             value={product.Nicotine ?? ""}
             onChange={(e) =>
               setProduct({
@@ -319,12 +352,12 @@ export default function InventoryCountDesktop() {
                   e.target.value === "" ? null : Number(e.target.value),
               })
             }
-            style={{ width: "100%", marginTop: 10, padding: 10 }}
+            style={{ width: "100%", padding: 10 }}
           />
 
+          <label>Sell Price *</label>
           <input
             type="number"
-            placeholder="Sell price"
             value={product.sell_price ?? ""}
             onChange={(e) =>
               setProduct({
@@ -333,16 +366,17 @@ export default function InventoryCountDesktop() {
                   e.target.value === "" ? null : Number(e.target.value),
               })
             }
-            style={{ width: "100%", marginTop: 10, padding: 10 }}
+            style={{ width: "100%", padding: 10 }}
           />
 
+          <label>Add Quantity *</label>
           <input
             ref={qtyRef}
             type="number"
             value={addQty}
             onFocus={(e) => e.currentTarget.select()}
             onChange={(e) => setAddQty(Number(e.target.value))}
-            style={{ width: 120, marginTop: 12, padding: 10 }}
+            style={{ width: 140, padding: 10 }}
           />
 
           <button
@@ -354,6 +388,18 @@ export default function InventoryCountDesktop() {
           </button>
         </>
       )}
+
+      <datalist id="brands">
+        {brandOptions.map((b) => (
+          <option key={b} value={b} />
+        ))}
+      </datalist>
+
+      <datalist id="models">
+        {modelOptions.map((m) => (
+          <option key={m} value={m} />
+        ))}
+      </datalist>
     </div>
   );
 }
