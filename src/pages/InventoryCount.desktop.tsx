@@ -29,6 +29,8 @@ type Product = {
 export default function InventoryCountDesktop() {
   const barcodeRef = useRef<HTMLInputElement | null>(null);
   const lastScanRef = useRef<number>(0);
+  const qtyRef = useRef<HTMLInputElement | null>(null);
+
 
   const [barcode, setBarcode] = useState("");
   const [product, setProduct] = useState<Product | null>(null);
@@ -96,7 +98,12 @@ export default function InventoryCountDesktop() {
 
   /* ---------- SAVE INVENTORY ---------- */
   async function saveAndAddInventory() {
-    if (!product || addQty <= 0) return;
+    const qty = Number(addQty);
+
+if (!product || !qty || qty <= 0) {
+  setLoading(false);
+  return;
+}
 
     setLoading(true);
 
@@ -231,6 +238,8 @@ export default function InventoryCountDesktop() {
                     subcategory_name: sc.name,
                     supplier_name: sc.supplier_name,
                   });
+                  setTimeout(() => qtyRef.current?.focus(), 50);
+
                 }}
                 style={{ width: "100%", padding: 10, marginTop: 6 }}
               >
@@ -257,21 +266,25 @@ export default function InventoryCountDesktop() {
           />
 
           <label style={{ marginTop: 14, display: "block" }}>
-            Add quantity
-          </label>
-          <input
-            type="number"
-            value={addQty}
-            onChange={(e) => setAddQty(Number(e.target.value))}
-            style={{
-              width: "100%",
-              padding: 14,
-              marginTop: 6,
-              fontSize: 18,
-              textAlign: "center",
-              fontWeight: "bold",
-            }}
-          />
+  Add quantity
+</label>
+
+<input
+  ref={qtyRef}
+  type="number"
+  value={addQty}
+  onFocus={(e) => e.currentTarget.select()}
+  onChange={(e) => setAddQty(Number(e.target.value))}
+  style={{
+    width: 120,              // smaller
+    padding: "10px 12px",
+    marginTop: 6,
+    fontSize: 20,
+    fontWeight: "bold",
+    textAlign: "center",
+  }}
+/>
+
 
           <button
             onClick={saveAndAddInventory}
