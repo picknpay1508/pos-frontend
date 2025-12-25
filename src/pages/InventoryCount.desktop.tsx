@@ -140,8 +140,7 @@ if (!product || !qty || qty <= 0) {
         .from("products")
         .update(payload)
         .eq("id", productId)
-        .eq("tenant_id", TENANT_ID);
-
+        
       if (error) {
         alert("Failed to update product");
         setLoading(false);
