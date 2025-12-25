@@ -214,14 +214,11 @@ export default function InventoryCountDesktop() {
     }
 
     if (addQty > 0) {
-  const newQty = product.quantity + addQty;
-
-  await supabase
-    .from("products")
-    .update({ quantity: newQty })
-    .eq("id", productId);
-}
-
+      await supabase
+        .from("products")
+        .update({ quantity: product.quantity + addQty })
+        .eq("id", productId);
+    }
 
     setBarcode("");
     setProduct(null);
@@ -233,21 +230,48 @@ export default function InventoryCountDesktop() {
 
   /* ================= UI ================= */
 
-  return (
-    <div style={{ maxWidth: 600, margin: "40px auto", padding: 24 }}>
-      <h2>Inventory Stock Count</h2>
+  const inputStyle = {
+    width: "100%",
+    padding: 12,
+    borderRadius: 8,
+    border: "1px solid #d1d5db",
+    fontSize: 15,
+  };
 
-      <label>Barcode</label>
+  return (
+    <div
+      style={{
+        maxWidth: 720,
+        margin: "40px auto",
+        padding: 24,
+        background: "#fff",
+        borderRadius: 12,
+        boxShadow: "0 10px 30px rgba(0,0,0,0.08)",
+      }}
+    >
+      <h2>Inventory Stock Count</h2>
+      <hr style={{ margin: "16px 0 24px" }} />
+
+      <label style={{ fontWeight: 700 }}>Scan Barcode</label>
       <input
         ref={barcodeRef}
         value={barcode}
         onChange={(e) => setBarcode(e.target.value)}
         onKeyDown={(e) => e.key === "Enter" && fetchProduct(barcode)}
-        style={{ width: "100%", padding: 10 }}
+        placeholder="Scan or type barcode"
+        style={{
+          width: "100%",
+          padding: 14,
+          fontSize: 18,
+          borderRadius: 8,
+          border: "2px solid #111827",
+        }}
       />
 
       {product && (
         <>
+          <h3 style={{ marginTop: 24 }}>Product Information</h3>
+
           <label>Brand *</label>
           <input
             list="brands"
@@ -255,17 +279,17 @@ export default function InventoryCountDesktop() {
             onChange={(e) =>
               setProduct({ ...product, name: e.target.value })
             }
-            style={{ width: "100%", padding: 10 }}
+            style={inputStyle}
           />
 
-          <label>Model (optional)</label>
+          <label>Model</label>
           <input
             list="models"
             value={product.model || ""}
             onChange={(e) =>
               setProduct({ ...product, model: e.target.value || null })
             }
-            style={{ width: "100%", padding: 10 }}
+            style={inputStyle}
           />
 
           <label>Category *</label>
@@ -282,7 +306,7 @@ export default function InventoryCountDesktop() {
               });
               setSelectedSubcategoryId("");
             }}
-            style={{ width: "100%", padding: 10 }}
+            style={inputStyle}
           >
             <option value="">Select category</option>
             {categories.map((c) => (
@@ -296,9 +320,8 @@ export default function InventoryCountDesktop() {
           <select
             value={selectedSubcategoryId}
             onChange={(e) => {
-              const id = e.target.value;
-              setSelectedSubcategoryId(id);
-              const sc = subcategoryById.get(id);
+              const sc = subcategoryById.get(e.target.value);
+              setSelectedSubcategoryId(e.target.value);
               if (!sc) return;
               setProduct({
                 ...product,
@@ -306,7 +329,7 @@ export default function InventoryCountDesktop() {
                 supplier_name: sc.supplier_name,
               });
             }}
-            style={{ width: "100%", padding: 10 }}
+            style={inputStyle}
           >
             <option value="">Select subcategory</option>
             {subcategories
@@ -318,8 +341,39 @@ export default function InventoryCountDesktop() {
               ))}
           </select>
 
+          <h3 style={{ marginTop: 24 }}>Inventory</h3>
+
           <label>Current Quantity</label>
-          <div>{product.quantity}</div>
+          <div
+            style={{
+              padding: "10px 14px",
+              background: "#f3f4f6",
+              borderRadius: 8,
+              fontSize: 18,
+              fontWeight: 600,
+              display: "inline-block",
+            }}
+          >
+            {product.quantity}
+          </div>
+
+          <label style={{ marginTop: 12 }}>Add Quantity (optional)</label>
+          <input
+            ref={qtyRef}
+            type="number"
+            value={addQty}
+            onFocus={(e) => e.currentTarget.select()}
+            onChange={(e) => setAddQty(Number(e.target.value))}
+            style={{
+              width: 160,
+              padding: 14,
+              fontSize: 22,
+              fontWeight: 600,
+              textAlign: "center",
+              borderRadius: 10,
+              border: "2px solid #16a34a",
+            }}
+          />
 
           <label>Size</label>
           <input
@@ -327,7 +381,7 @@ export default function InventoryCountDesktop() {
             onChange={(e) =>
               setProduct({ ...product, size: e.target.value || null })
             }
-            style={{ width: "100%", padding: 10 }}
+            style={inputStyle}
           />
 
           <label>Flavor</label>
@@ -336,7 +390,7 @@ export default function InventoryCountDesktop() {
             onChange={(e) =>
               setProduct({ ...product, flavor: e.target.value || null })
             }
-            style={{ width: "100%", padding: 10 }}
+            style={inputStyle}
           />
 
           <label>Nicotine</label>
@@ -350,7 +404,7 @@ export default function InventoryCountDesktop() {
                   e.target.value === "" ? null : Number(e.target.value),
               })
             }
-            style={{ width: "100%", padding: 10 }}
+            style={inputStyle}
           />
 
           <label>Sell Price *</label>
@@ -364,37 +418,27 @@ export default function InventoryCountDesktop() {
                   e.target.value === "" ? null : Number(e.target.value),
               })
             }
-            style={{ width: "100%", padding: 10 }}
-          />
-
-          <label>Add Quantity *</label>
-          <input
-            ref={qtyRef}
-            type="number"
-            value={addQty}
-            onFocus={(e) => e.currentTarget.select()}
-            onChange={(e) => setAddQty(Number(e.target.value))}
-            style={{ width: 140, padding: 10 }}
+            style={inputStyle}
           />
 
           <button
-  onClick={saveAndAddInventory}
-  disabled={loading}
-  style={{
-    width: "100%",
-    marginTop: 20,
-    padding: "16px 0",
-    fontSize: 18,
-    fontWeight: 600,
-    backgroundColor: loading ? "#9ca3af" : "#16a34a",
-    color: "#fff",
-    border: "none",
-    borderRadius: 8,
-    cursor: loading ? "not-allowed" : "pointer",
-  }}
->
-
-            {loading ? "Saving..." : "Save & Add Inventory"}
+            onClick={saveAndAddInventory}
+            disabled={loading}
+            style={{
+              width: "100%",
+              marginTop: 28,
+              padding: "18px 0",
+              fontSize: 18,
+              fontWeight: 700,
+              backgroundColor: loading ? "#9ca3af" : "#16a34a",
+              color: "#fff",
+              border: "none",
+              borderRadius: 10,
+              cursor: loading ? "not-allowed" : "pointer",
+              boxShadow: "0 6px 16px rgba(22,163,74,0.35)",
+            }}
+          >
+            {loading ? "Saving..." : "Save & Update Inventory"}
           </button>
         </>
       )}
