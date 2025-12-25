@@ -137,15 +137,17 @@ if (!product || !qty || qty <= 0) {
       productId = data.id;
     } else {
       const { error } = await supabase
-        .from("products")
-        .update(payload)
-        .eq("id", productId)
-        
-      if (error) {
-        alert("Failed to update product");
-        setLoading(false);
-        return;
-      }
+  .from("products")
+  .update(payload)
+  .eq("id", productId);
+
+if (error) {
+  console.error(error);
+  alert(error.message);
+  setLoading(false);
+  return;
+}
+
     }
 
     await supabase.from("inventory_adjustments").insert({
