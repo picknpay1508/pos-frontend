@@ -1,5 +1,5 @@
 import { useState } from "react";
-import InventoryCountDesktop from "./pages/InventoryCount.desktop";
+import InventoryCount from "./pages/InventoryCount";
 import CategoryAdmin from "./pages/CategoryAdmin";
 
 export default function App() {
@@ -22,7 +22,7 @@ export default function App() {
       </div>
 
       {/* SCREENS */}
-      {screen === "inventory" && <InventoryCountDesktop />}
+      {screen === "inventory" && <InventoryCount />}
       {screen === "categories" && <CategoryAdmin />}
     </div>
   );
