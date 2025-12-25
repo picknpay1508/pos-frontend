@@ -211,12 +211,15 @@ export default function InventoryCountDesktop() {
       }
     }
 
-    const { error: invErr } = await supabase.from("inventory_adjustments").insert({
-      tenant_id: TENANT_ID,
-      product_id: productId,
-      qty_added: addQty,
-      reason: "stock_count",
-    });
+    const { error: invErr } = await supabase
+  .from("products")
+  .update({
+    quantity: supabase.rpc("increment", {
+      x: addQty,
+    }),
+  })
+  .eq("id", productId);
+
 
     if (invErr) {
       alert(invErr.message);
