@@ -3,7 +3,12 @@ import { supabase } from "../lib/supabase";
 
 const TENANT_ID = "c1feb59d-ac1d-4ab4-b2b2-f679be78cffb";
 
-type Category = { id: string; name: string };
+/* ================= TYPES ================= */
+
+type Category = {
+  id: string; // UUID
+  name: string;
+};
 
 type Subcategory = {
   id: string;
@@ -17,7 +22,7 @@ type Product = {
   barcode: string;
   name: string;
 
-  category_id: string | null; // UUID only
+  category_id: string | null; // UUID ONLY
 
   // SNAPSHOTS (TEXT)
   subcategory_name: string | null;
@@ -31,23 +36,25 @@ type Product = {
   sell_price: number | null;
 };
 
+/* ================= HELPERS ================= */
+
 function isVapeCategory(categoryName: string) {
   const x = categoryName.toLowerCase();
   return (
     x.includes("vape") ||
     x.includes("disposable") ||
     x.includes("pod") ||
-    x.includes("pods") ||
     x.includes("eliquid") ||
-    x.includes("ejuice") ||
-    x.includes("e-juice")
+    x.includes("ejuice")
   );
 }
 
-function needsNicotineBySubcategoryName(subcategoryName: string) {
+function needsNicotine(subcategoryName: string) {
   const x = subcategoryName.toLowerCase();
-  return x.includes("eliquid") || x.includes("ejuice") || x.includes("e-juice") || x.includes("pod") || x.includes("pods");
+  return x.includes("eliquid") || x.includes("ejuice") || x.includes("pod");
 }
+
+/* ================= COMPONENT ================= */
 
 export default function InventoryCountDesktop() {
   const barcodeRef = useRef<HTMLInputElement | null>(null);
@@ -56,8 +63,6 @@ export default function InventoryCountDesktop() {
 
   const [barcode, setBarcode] = useState("");
   const [product, setProduct] = useState<Product | null>(null);
-
-  // UI-only: store chosen subcategory row id so selection never “gets lost”
   const [selectedSubcategoryId, setSelectedSubcategoryId] = useState<string>("");
 
   const [addQty, setAddQty] = useState<number>(0);
@@ -66,8 +71,16 @@ export default function InventoryCountDesktop() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [subcategories, setSubcategories] = useState<Subcategory[]>([]);
 
-  const categoryById = useMemo(() => new Map(categories.map((c) => [c.id, c])), [categories]);
-  const subcategoryById = useMemo(() => new Map(subcategories.map((s) => [s.id, s])), [subcategories]);
+  const categoryById = useMemo(
+    () => new Map(categories.map((c) => [c.id, c])),
+    [categories]
+  );
+  const subcategoryById = useMemo(
+    () => new Map(subcategories.map((s) => [s.id, s])),
+    [subcategories]
+  );
+
+  /* ================= LOAD MASTER DATA ================= */
 
   useEffect(() => {
     supabase
@@ -75,15 +88,17 @@ export default function InventoryCountDesktop() {
       .select("id, name")
       .eq("tenant_id", TENANT_ID)
       .order("name")
-      .then(({ data }) => setCategories((data || []) as Category[]));
+      .then(({ data }) => setCategories(data || []));
 
     supabase
       .from("subcategories")
       .select("id, name, supplier_name, category_id")
       .eq("tenant_id", TENANT_ID)
       .order("name")
-      .then(({ data }) => setSubcategories((data || []) as Subcategory[]));
+      .then(({ data }) => setSubcategories(data || []));
   }, []);
+
+  /* ================= BARCODE LOOKUP ================= */
 
   async function fetchProduct(code: string) {
     const now = Date.now();
@@ -94,14 +109,14 @@ export default function InventoryCountDesktop() {
     setSelectedSubcategoryId("");
     setAddQty(0);
 
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from("products")
       .select("*")
       .eq("tenant_id", TENANT_ID)
       .eq("barcode", code)
       .single();
 
-    if (error || !data) {
+    if (!data) {
       setProduct({
         barcode: code,
         name: "",
@@ -116,7 +131,7 @@ export default function InventoryCountDesktop() {
       return;
     }
 
-    const loaded: Product = {
+    setProduct({
       id: data.id,
       barcode: data.barcode,
       name: data.name,
@@ -127,66 +142,59 @@ export default function InventoryCountDesktop() {
       flavor: data.flavor ?? null,
       Nicotine: data.Nicotine ?? null,
       sell_price: data.sell_price ?? null,
-    };
+    });
 
-    setProduct(loaded);
-
-    // try to re-select the matching subcategory row in UI
-    if (loaded.category_id && loaded.subcategory_name) {
-      const match = subcategories.find(
-        (s) =>
-          s.category_id === loaded.category_id &&
-          s.name === loaded.subcategory_name &&
-          (loaded.supplier_name ? s.supplier_name === loaded.supplier_name : true)
-      );
-      if (match) setSelectedSubcategoryId(match.id);
-    }
+    // Restore selected subcategory in UI if possible
+    const match = subcategories.find(
+      (s) =>
+        s.category_id === data.category_id &&
+        s.name === data.subcategory_name &&
+        s.supplier_name === data.supplier_name
+    );
+    if (match) setSelectedSubcategoryId(match.id);
 
     setTimeout(() => qtyRef.current?.focus(), 50);
   }
 
+  /* ================= SAVE INVENTORY ================= */
+
   async function saveAndAddInventory() {
     if (!product) return;
 
-    // Ensure we have a selected subcategory row
-    const sc = selectedSubcategoryId ? subcategoryById.get(selectedSubcategoryId) : undefined;
+    const sc = selectedSubcategoryId
+      ? subcategoryById.get(selectedSubcategoryId)
+      : null;
 
-    if (!product.name) {
-      alert("Product name is required.");
+    if (
+      !product.name ||
+      !product.category_id ||
+      !sc ||
+      product.sell_price === null
+    ) {
+      alert("Please complete product name, category, subcategory and price.");
       return;
     }
-    if (!product.category_id) {
-      alert("Category is required.");
-      return;
-    }
-    if (!sc) {
-      alert("Please select subcategory (supplier).");
-      return;
-    }
-    if (product.sell_price === null) {
-      alert("Sell price is required.");
-      return;
-    }
+
     if (addQty <= 0) {
-      alert("Add quantity must be greater than 0.");
+      alert("Quantity must be greater than 0.");
       return;
     }
 
     setLoading(true);
 
-    // SNAPSHOTS written at inventory time
-    const payload: any = {
+    const payload = {
       tenant_id: TENANT_ID,
       barcode: product.barcode,
       name: product.name,
       category_id: product.category_id, // UUID
 
-      subcategory_name: sc.name, // TEXT
-      supplier_name: sc.supplier_name ?? null, // TEXT
+      // SNAPSHOTS (TEXT)
+      subcategory_name: sc.name,
+      supplier_name: sc.supplier_name,
 
-      size: product.size ?? null,
-      flavor: product.flavor ?? null,
-      Nicotine: product.Nicotine ?? null,
+      size: product.size,
+      flavor: product.flavor,
+      Nicotine: product.Nicotine,
 
       sell_price: product.sell_price,
       is_active: true,
@@ -194,16 +202,27 @@ export default function InventoryCountDesktop() {
 
     let productId = product.id;
 
+    // Insert or update product
     if (!productId) {
-      const { data, error } = await supabase.from("products").insert(payload).select("id").single();
+      const { data, error } = await supabase
+        .from("products")
+        .insert(payload)
+        .select("id")
+        .single();
+
       if (error) {
         alert(error.message);
         setLoading(false);
         return;
       }
+
       productId = data.id;
     } else {
-      const { error } = await supabase.from("products").update(payload).eq("id", productId);
+      const { error } = await supabase
+        .from("products")
+        .update(payload)
+        .eq("id", productId);
+
       if (error) {
         alert(error.message);
         setLoading(false);
@@ -211,23 +230,27 @@ export default function InventoryCountDesktop() {
       }
     }
 
-    const { error: invErr } = await supabase
-  .from("products")
-  .update({
-    quantity: supabase.rpc("increment", {
-      x: addQty,
-    }),
-  })
-  .eq("id", productId);
+    // 🔥 DIRECT QUANTITY UPDATE (NO RPC, NO EXTRA TABLE)
+    const { data: current } = await supabase
+      .from("products")
+      .select("quantity")
+      .eq("id", productId)
+      .single();
 
+    const newQty = Number(current?.quantity || 0) + Number(addQty);
 
-    if (invErr) {
-      alert(invErr.message);
+    const { error: qtyError } = await supabase
+      .from("products")
+      .update({ quantity: newQty })
+      .eq("id", productId);
+
+    if (qtyError) {
+      alert(qtyError.message);
       setLoading(false);
       return;
     }
 
-    // reset
+    // RESET FOR NEXT SCAN
     setBarcode("");
     setProduct(null);
     setSelectedSubcategoryId("");
@@ -236,26 +259,20 @@ export default function InventoryCountDesktop() {
     setLoading(false);
   }
 
+  /* ================= UI ================= */
+
   const selectedCategoryName =
-    product?.category_id ? categoryById.get(product.category_id)?.name || "" : "";
+    product?.category_id && categoryById.get(product.category_id)
+      ? categoryById.get(product.category_id)!.name
+      : "";
 
-  const showFlavor = !!product?.category_id && isVapeCategory(selectedCategoryName);
-
+  const showFlavor = isVapeCategory(selectedCategoryName);
   const showNicotine =
-    !!product?.subcategory_name && needsNicotineBySubcategoryName(product.subcategory_name);
+    product?.subcategory_name && needsNicotine(product.subcategory_name);
 
   return (
-    <div
-      style={{
-        maxWidth: 560,
-        margin: "40px auto",
-        background: "#fff",
-        padding: 24,
-        borderRadius: 10,
-        boxShadow: "0 4px 20px rgba(0,0,0,0.1)",
-      }}
-    >
-      <h2 style={{ marginBottom: 16 }}>Inventory Stock Count</h2>
+    <div style={{ maxWidth: 560, margin: "40px auto", padding: 24 }}>
+      <h2>Inventory Stock Count</h2>
 
       <input
         ref={barcodeRef}
@@ -268,28 +285,27 @@ export default function InventoryCountDesktop() {
 
       {product && (
         <>
-          <label style={{ marginTop: 12, display: "block" }}>Product name</label>
           <input
-            value={product.name}
-            onChange={(e) => setProduct({ ...product, name: e.target.value })}
             placeholder="Product name"
-            style={{ width: "100%", padding: 10, marginTop: 6 }}
+            value={product.name}
+            onChange={(e) =>
+              setProduct({ ...product, name: e.target.value })
+            }
+            style={{ width: "100%", marginTop: 12, padding: 10 }}
           />
 
-          <label style={{ marginTop: 12, display: "block" }}>Category</label>
           <select
             value={product.category_id ?? ""}
             onChange={(e) => {
-              const newCat = e.target.value || null;
               setProduct({
                 ...product,
-                category_id: newCat,
+                category_id: e.target.value || null,
                 subcategory_name: null,
                 supplier_name: null,
               });
               setSelectedSubcategoryId("");
             }}
-            style={{ width: "100%", padding: 10, marginTop: 6 }}
+            style={{ width: "100%", marginTop: 12, padding: 10 }}
           >
             <option value="">Select category</option>
             {categories.map((c) => (
@@ -300,93 +316,85 @@ export default function InventoryCountDesktop() {
           </select>
 
           {product.category_id && (
-            <>
-              <label style={{ marginTop: 12, display: "block" }}>
-                Subcategory (includes supplier)
-              </label>
-              <select
-                value={selectedSubcategoryId}
-                onChange={(e) => {
-                  const id = e.target.value;
-                  setSelectedSubcategoryId(id);
+            <select
+              value={selectedSubcategoryId}
+              onChange={(e) => {
+                const id = e.target.value;
+                setSelectedSubcategoryId(id);
+                const sc = subcategoryById.get(id);
+                if (!sc) return;
 
-                  const sc = subcategoryById.get(id);
-                  if (!sc) return;
+                setProduct({
+                  ...product,
+                  subcategory_name: sc.name,
+                  supplier_name: sc.supplier_name,
+                });
 
-                  setProduct({
-                    ...product,
-                    subcategory_name: sc.name,
-                    supplier_name: sc.supplier_name ?? null,
-                  });
-
-                  setTimeout(() => qtyRef.current?.focus(), 50);
-                }}
-                style={{ width: "100%", padding: 10, marginTop: 6 }}
-              >
-                <option value="">Select subcategory (supplier)</option>
-                {subcategories
-                  .filter((s) => s.category_id === product.category_id)
-                  .map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name} — {s.supplier_name}
-                    </option>
-                  ))}
-              </select>
-            </>
+                setTimeout(() => qtyRef.current?.focus(), 50);
+              }}
+              style={{ width: "100%", marginTop: 12, padding: 10 }}
+            >
+              <option value="">Select subcategory (supplier)</option>
+              {subcategories
+                .filter((s) => s.category_id === product.category_id)
+                .map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name} — {s.supplier_name}
+                  </option>
+                ))}
+            </select>
           )}
 
-          <label style={{ marginTop: 12, display: "block" }}>Size (optional)</label>
           <input
+            placeholder="Size (optional)"
             value={product.size ?? ""}
-            onChange={(e) => setProduct({ ...product, size: e.target.value || null })}
-            placeholder="Size"
-            style={{ width: "100%", padding: 10, marginTop: 6 }}
+            onChange={(e) =>
+              setProduct({ ...product, size: e.target.value || null })
+            }
+            style={{ width: "100%", marginTop: 12, padding: 10 }}
           />
 
           {showFlavor && (
-            <>
-              <label style={{ marginTop: 12, display: "block" }}>Flavor (optional)</label>
-              <input
-                value={product.flavor ?? ""}
-                onChange={(e) => setProduct({ ...product, flavor: e.target.value || null })}
-                placeholder="Flavor"
-                style={{ width: "100%", padding: 10, marginTop: 6 }}
-              />
-            </>
+            <input
+              placeholder="Flavor (optional)"
+              value={product.flavor ?? ""}
+              onChange={(e) =>
+                setProduct({ ...product, flavor: e.target.value || null })
+              }
+              style={{ width: "100%", marginTop: 12, padding: 10 }}
+            />
           )}
 
           {showNicotine && (
-            <>
-              <label style={{ marginTop: 12, display: "block" }}>Nicotine (optional)</label>
-              <input
-                type="number"
-                value={product.Nicotine ?? ""}
-                onChange={(e) =>
-                  setProduct({
-                    ...product,
-                    Nicotine: e.target.value === "" ? null : Number(e.target.value),
-                  })
-                }
-                placeholder="mg/ml"
-                style={{ width: "100%", padding: 10, marginTop: 6 }}
-              />
-            </>
+            <input
+              type="number"
+              placeholder="Nicotine (optional)"
+              value={product.Nicotine ?? ""}
+              onChange={(e) =>
+                setProduct({
+                  ...product,
+                  Nicotine:
+                    e.target.value === "" ? null : Number(e.target.value),
+                })
+              }
+              style={{ width: "100%", marginTop: 12, padding: 10 }}
+            />
           )}
 
-          <label style={{ marginTop: 12, display: "block" }}>Sell price</label>
           <input
             type="number"
+            placeholder="Sell price"
             value={product.sell_price ?? ""}
             onChange={(e) =>
               setProduct({
                 ...product,
-                sell_price: e.target.value === "" ? null : Number(e.target.value),
+                sell_price:
+                  e.target.value === "" ? null : Number(e.target.value),
               })
             }
-            style={{ width: "100%", padding: 10, marginTop: 6 }}
+            style={{ width: "100%", marginTop: 12, padding: 10 }}
           />
 
-          <label style={{ marginTop: 14, display: "block" }}>Add quantity</label>
           <input
             ref={qtyRef}
             type="number"
@@ -395,10 +403,9 @@ export default function InventoryCountDesktop() {
             onChange={(e) => setAddQty(Number(e.target.value))}
             style={{
               width: 120,
-              padding: "10px 12px",
-              marginTop: 6,
+              marginTop: 12,
+              padding: 10,
               fontSize: 20,
-              fontWeight: "bold",
               textAlign: "center",
             }}
           />
@@ -406,17 +413,7 @@ export default function InventoryCountDesktop() {
           <button
             onClick={saveAndAddInventory}
             disabled={loading}
-            style={{
-              width: "100%",
-              marginTop: 18,
-              padding: 14,
-              fontSize: 18,
-              background: "#0f766e",
-              color: "#fff",
-              border: "none",
-              borderRadius: 6,
-              cursor: "pointer",
-            }}
+            style={{ width: "100%", marginTop: 16, padding: 14 }}
           >
             {loading ? "Saving..." : "Save & Add Inventory"}
           </button>
