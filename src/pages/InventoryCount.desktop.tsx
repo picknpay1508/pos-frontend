@@ -4,6 +4,8 @@ import { supabase } from "../lib/supabase";
 const TENANT_ID = "c1feb59d-ac1d-4ab4-b2b2-f679be78cffb";
 const ROWS = 10;
 
+/* ================= TYPES ================= */
+
 type Category = { id: string; name: string };
 
 type Subcategory = {
@@ -18,20 +20,38 @@ type BulkRow = {
   currentQty: number | null;
   flavor: string;
   nicotine: string;
-  qty: string; // qty to add
+  qty: string;
 };
+
+type RecentProduct = {
+  category_id: string | null;
+  category_name: string | null;
+  subcategory_name: string | null;
+  supplier_name: string | null;
+  name: string;
+  model: string | null;
+  size: string | null;
+  flavor: string | null;
+  Nicotine: number | null;
+  quantity: number | null;
+  sell_price: number | null;
+};
+
+/* ================= COMPONENT ================= */
 
 export default function InventoryCountDesktop() {
   const barcodeRefs = useRef<Array<HTMLInputElement | null>>([]);
 
-  // LEFT PANEL (MASTER)
+  /* LEFT PANEL STATE */
+  const [activeTab, setActiveTab] = useState<"category" | "recent">("category");
+
   const [categoryId, setCategoryId] = useState("");
   const [subcategoryId, setSubcategoryId] = useState("");
   const [brand, setBrand] = useState("");
   const [model, setModel] = useState("");
   const [sellPrice, setSellPrice] = useState("");
 
-  // RIGHT PANEL (ROWS)
+  /* RIGHT PANEL */
   const [rows, setRows] = useState<BulkRow[]>(
     Array.from({ length: ROWS }, () => ({
       barcode: "",
@@ -44,6 +64,7 @@ export default function InventoryCountDesktop() {
 
   const [categories, setCategories] = useState<Category[]>([]);
   const [subcategories, setSubcategories] = useState<Subcategory[]>([]);
+  const [recent, setRecent] = useState<RecentProduct[]>([]);
   const [loading, setLoading] = useState(false);
 
   const subcategoryById = useMemo(
@@ -55,6 +76,8 @@ export default function InventoryCountDesktop() {
     () => new Map(categories.map((c) => [c.id, c])),
     [categories]
   );
+
+  /* ================= LOAD DATA ================= */
 
   useEffect(() => {
     supabase
@@ -70,10 +93,38 @@ export default function InventoryCountDesktop() {
       .eq("tenant_id", TENANT_ID)
       .order("name")
       .then(({ data }) => setSubcategories(data || []));
+
+    loadRecent();
   }, []);
 
+  async function loadRecent() {
+    const { data } = await supabase
+      .from("products")
+      .select(
+        `
+        category_id,
+        category_name,
+        subcategory_name,
+        supplier_name,
+        name,
+        model,
+        size,
+        flavor,
+        Nicotine,
+        quantity,
+        sell_price
+      `
+      )
+      .eq("tenant_id", TENANT_ID)
+      .order("updated_at", { ascending: false })
+      .limit(15);
+
+    setRecent(data || []);
+  }
+
+  /* ================= BARCODE LOOKUP ================= */
+
   async function handleBarcodeScan(index: number, barcode: string) {
-    // update barcode immediately (so staff sees what they scanned)
     setRows((prev) => {
       const next = [...prev];
       next[index] = { ...next[index], barcode };
@@ -93,16 +144,18 @@ export default function InventoryCountDesktop() {
       const next = [...prev];
       next[index] = {
         ...next[index],
-        currentQty: data ? (data.quantity ?? 0) : 0,
-        flavor: data?.flavor ?? next[index].flavor ?? "",
+        currentQty: data ? data.quantity ?? 0 : 0,
+        flavor: data?.flavor ?? "",
         nicotine:
           data?.Nicotine === null || data?.Nicotine === undefined
-            ? next[index].nicotine ?? ""
+            ? ""
             : String(data.Nicotine),
       };
       return next;
     });
   }
+
+  /* ================= SAVE ALL ================= */
 
   async function saveAll() {
     if (!categoryId || !subcategoryId || !brand || !sellPrice) {
@@ -130,8 +183,7 @@ export default function InventoryCountDesktop() {
       const categoryName = categoryById.get(categoryId)?.name || null;
 
       if (!existing?.id) {
-        // create new product
-        const { error } = await supabase.from("products").insert({
+        await supabase.from("products").insert({
           tenant_id: TENANT_ID,
           barcode: row.barcode,
           name: brand,
@@ -143,33 +195,10 @@ export default function InventoryCountDesktop() {
           flavor: row.flavor || null,
           Nicotine: row.nicotine ? Number(row.nicotine) : null,
           sell_price: Number(sellPrice),
-          quantity: qtyToAdd, // if blank => 0
+          quantity: qtyToAdd,
           is_active: true,
         });
-
-        if (error) {
-          console.error("Insert error:", error.message);
-          continue;
-        }
       } else {
-        // update existing product master info (snapshots) + optional attributes
-        await supabase
-          .from("products")
-          .update({
-            name: brand,
-            model: model || null,
-            category_id: categoryId,
-            category_name: categoryName,
-            subcategory_name: sc.name,
-            supplier_name: sc.supplier_name,
-            flavor: row.flavor || null,
-            Nicotine: row.nicotine ? Number(row.nicotine) : null,
-            sell_price: Number(sellPrice),
-            is_active: true,
-          })
-          .eq("id", existing.id);
-
-        // add quantity only if > 0
         if (qtyToAdd > 0) {
           await supabase
             .from("products")
@@ -179,7 +208,6 @@ export default function InventoryCountDesktop() {
       }
     }
 
-    // reset right panel only
     setRows(
       Array.from({ length: ROWS }, () => ({
         barcode: "",
@@ -191,224 +219,140 @@ export default function InventoryCountDesktop() {
     );
 
     barcodeRefs.current[0]?.focus();
+    loadRecent();
     setLoading(false);
   }
 
-  const labelStyle: React.CSSProperties = {
-    fontSize: 13,
-    fontWeight: 600,
-    color: "#111827",
-    marginBottom: 6,
-  };
+  /* ================= UI ================= */
 
-  const inputStyle: React.CSSProperties = {
+  const label = { fontSize: 13, fontWeight: 600, marginBottom: 4 };
+  const input = {
     width: "100%",
-    padding: 12,
+    padding: 10,
     borderRadius: 8,
     border: "1px solid #d1d5db",
-    fontSize: 14,
-    background: "#fff",
-  };
-
-  const cardStyle: React.CSSProperties = {
-    background: "#ffffff",
-    borderRadius: 12,
-    boxShadow: "0 10px 30px rgba(0,0,0,0.08)",
-    padding: 16,
   };
 
   return (
     <div style={{ display: "flex", gap: 20, padding: 20 }}>
       {/* LEFT PANEL */}
-      <div style={{ width: 340 }}>
-        <div style={cardStyle}>
-          <h3 style={{ marginTop: 0, marginBottom: 14 }}>Master Product Info</h3>
+      <div style={{ width: 360 }}>
+        <div style={{ marginBottom: 10 }}>
+          <button onClick={() => setActiveTab("category")}>
+            Category
+          </button>
+          <button
+            onClick={() => setActiveTab("recent")}
+            style={{ marginLeft: 8 }}
+          >
+            Recent
+          </button>
+        </div>
 
-          <div style={{ display: "grid", gap: 14 }}>
-            <div>
-              <div style={labelStyle}>Category *</div>
-              <select
-                value={categoryId}
-                onChange={(e) => {
-                  setCategoryId(e.target.value);
-                  setSubcategoryId("");
-                }}
-                style={inputStyle}
-              >
-                <option value="">Select</option>
-                {categories.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
+        {activeTab === "category" && (
+          <>
+            <div style={label}>Category *</div>
+            <select
+              value={categoryId}
+              onChange={(e) => {
+                setCategoryId(e.target.value);
+                setSubcategoryId("");
+              }}
+              style={input}
+            >
+              <option value="">Select</option>
+              {categories.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+
+            <div style={label}>Subcategory *</div>
+            <select
+              value={subcategoryId}
+              onChange={(e) => setSubcategoryId(e.target.value)}
+              style={input}
+            >
+              <option value="">Select</option>
+              {subcategories
+                .filter((s) => s.category_id === categoryId)
+                .map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name} — {s.supplier_name}
                   </option>
                 ))}
-              </select>
-            </div>
+            </select>
 
-            <div>
-              <div style={labelStyle}>Subcategory *</div>
-              <select
-                value={subcategoryId}
-                onChange={(e) => setSubcategoryId(e.target.value)}
-                style={inputStyle}
+            <div style={label}>Brand *</div>
+            <input value={brand} onChange={(e) => setBrand(e.target.value)} style={input} />
+
+            <div style={label}>Model</div>
+            <input value={model} onChange={(e) => setModel(e.target.value)} style={input} />
+
+            <div style={label}>Sell Price *</div>
+            <input value={sellPrice} onChange={(e) => setSellPrice(e.target.value)} style={input} />
+          </>
+        )}
+
+        {activeTab === "recent" && (
+          <div style={{ fontSize: 12 }}>
+            {recent.map((r, i) => (
+              <div
+                key={i}
+                style={{
+                  padding: 8,
+                  borderBottom: "1px solid #e5e7eb",
+                  cursor: "pointer",
+                }}
+                onClick={() => {
+                  setCategoryId(r.category_id || "");
+                  const sc = subcategories.find(
+                    (s) =>
+                      s.name === r.subcategory_name &&
+                      s.supplier_name === r.supplier_name
+                  );
+                  setSubcategoryId(sc?.id || "");
+                  setBrand(r.name);
+                  setModel(r.model || "");
+                  setSellPrice(r.sell_price ? String(r.sell_price) : "");
+                  setActiveTab("category");
+                }}
               >
-                <option value="">Select</option>
-                {subcategories
-                  .filter((s) => s.category_id === categoryId)
-                  .map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name} — {s.supplier_name}
-                    </option>
-                  ))}
-              </select>
-            </div>
-
-            <div>
-              <div style={labelStyle}>Brand *</div>
-              <input value={brand} onChange={(e) => setBrand(e.target.value)} style={inputStyle} />
-            </div>
-
-            <div>
-              <div style={labelStyle}>Model</div>
-              <input value={model} onChange={(e) => setModel(e.target.value)} style={inputStyle} />
-            </div>
-
-            <div>
-              <div style={labelStyle}>Sell Price *</div>
-              <input
-                value={sellPrice}
-                onChange={(e) => setSellPrice(e.target.value)}
-                style={inputStyle}
-                placeholder="e.g. 16.99"
-              />
-            </div>
+                <strong>{r.name}</strong>
+                <div>
+                  {r.category_name} / {r.subcategory_name}
+                </div>
+                <div>
+                  {r.size} {r.flavor} {r.Nicotine ? `${r.Nicotine}mg` : ""}
+                </div>
+                <div>
+                  Qty: {r.quantity} | ${r.sell_price}
+                </div>
+              </div>
+            ))}
           </div>
-        </div>
+        )}
       </div>
 
       {/* RIGHT PANEL */}
       <div style={{ flex: 1 }}>
-        <div style={cardStyle}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-            <h3 style={{ marginTop: 0, marginBottom: 14 }}>Bulk Entry (10 items)</h3>
-            <div style={{ fontSize: 12, color: "#6b7280" }}>
-              Tip: scan barcode → edit fields → Save All
-            </div>
-          </div>
-
-          {/* Header row */}
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "2.2fr 0.7fr 1.4fr 0.8fr 0.8fr",
-              gap: 10,
-              marginBottom: 8,
-              fontSize: 12,
-              fontWeight: 700,
-              color: "#374151",
+        {rows.map((row, i) => (
+          <input
+            key={i}
+            ref={(el) => {
+              barcodeRefs.current[i] = el;
             }}
-          >
-            <div>Barcode</div>
-            <div>In Stock</div>
-            <div>Flavor</div>
-            <div>Nic</div>
-            <div>Add Qty</div>
-          </div>
+            placeholder="Barcode"
+            value={row.barcode}
+            onChange={(e) => handleBarcodeScan(i, e.target.value)}
+            style={input}
+          />
+        ))}
 
-          {rows.map((row, i) => (
-            <div
-              key={i}
-              style={{
-                display: "grid",
-                gridTemplateColumns: "2.2fr 0.7fr 1.4fr 0.8fr 0.8fr",
-                gap: 10,
-                marginBottom: 8,
-              }}
-            >
-              <input
-                ref={(el) => {
-                  barcodeRefs.current[i] = el;
-                }}
-                placeholder="Scan barcode"
-                value={row.barcode}
-                onChange={(e) => handleBarcodeScan(i, e.target.value)}
-                style={{
-                  ...inputStyle,
-                  fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
-                  letterSpacing: "0.5px",
-                }}
-              />
-
-              <input
-                value={row.currentQty ?? ""}
-                disabled
-                style={{
-                  ...inputStyle,
-                  background: "#f3f4f6",
-                  fontWeight: 700,
-                  textAlign: "center",
-                }}
-              />
-
-              <input
-                placeholder="Flavor"
-                value={row.flavor}
-                onChange={(e) => {
-                  const next = [...rows];
-                  next[i] = { ...next[i], flavor: e.target.value };
-                  setRows(next);
-                }}
-                style={inputStyle}
-              />
-
-              <input
-                placeholder="Nic"
-                value={row.nicotine}
-                onChange={(e) => {
-                  const next = [...rows];
-                  next[i] = { ...next[i], nicotine: e.target.value };
-                  setRows(next);
-                }}
-                style={inputStyle}
-              />
-
-              <input
-                placeholder="Qty"
-                value={row.qty}
-                onChange={(e) => {
-                  const next = [...rows];
-                  next[i] = { ...next[i], qty: e.target.value };
-                  setRows(next);
-                }}
-                style={{
-                  ...inputStyle,
-                  textAlign: "center",
-                  fontWeight: 700,
-                  border: "2px solid #16a34a",
-                }}
-              />
-            </div>
-          ))}
-
-          <button
-            onClick={saveAll}
-            disabled={loading}
-            style={{
-              marginTop: 12,
-              padding: 14,
-              width: "100%",
-              fontSize: 16,
-              fontWeight: 700,
-              background: loading ? "#9ca3af" : "#16a34a",
-              color: "#fff",
-              border: "none",
-              borderRadius: 10,
-              cursor: loading ? "not-allowed" : "pointer",
-              boxShadow: "0 6px 16px rgba(22,163,74,0.35)",
-            }}
-          >
-            {loading ? "Saving..." : "Save All"}
-          </button>
-        </div>
+        <button onClick={saveAll} disabled={loading}>
+          Save All
+        </button>
       </div>
     </div>
   );
