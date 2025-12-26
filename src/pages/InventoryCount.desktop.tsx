@@ -42,7 +42,7 @@ type RecentProduct = {
 export default function InventoryCountDesktop() {
   const barcodeRefs = useRef<Array<HTMLInputElement | null>>([]);
 
-  /* LEFT PANEL */
+  /* LEFT PANEL STATE */
   const [activeTab, setActiveTab] = useState<"category" | "recent">("category");
   const [categoryId, setCategoryId] = useState("");
   const [subcategoryId, setSubcategoryId] = useState("");
@@ -50,7 +50,7 @@ export default function InventoryCountDesktop() {
   const [model, setModel] = useState("");
   const [sellPrice, setSellPrice] = useState("");
 
-  /* RIGHT PANEL */
+  /* RIGHT PANEL STATE */
   const [rows, setRows] = useState<BulkRow[]>(
     Array.from({ length: ROWS }, () => ({
       barcode: "",
@@ -69,17 +69,6 @@ export default function InventoryCountDesktop() {
   const categoryById = useMemo(
     () => new Map(categories.map((c) => [c.id, c])),
     [categories]
-  );
-
-  const subcategoryByKey = useMemo(
-    () =>
-      new Map(
-        subcategories.map((s) => [
-          `${s.name}|${s.supplier_name}`,
-          s.id,
-        ])
-      ),
-    [subcategories]
   );
 
   /* ================= LOAD DATA ================= */
@@ -220,59 +209,87 @@ export default function InventoryCountDesktop() {
   /* ================= UI ================= */
 
   return (
-    <div style={{ display: "flex", gap: 24, padding: 24 }}>
-      {/* LEFT PANEL */}
-      <div style={{ width: 360 }}>
-        <div style={{ marginBottom: 12 }}>
+    <div
+      style={{
+        display: "grid",
+        gridTemplateColumns: "360px 1fr",
+        gap: 24,
+        padding: 24,
+        alignItems: "start",
+      }}
+    >
+      {/* ================= LEFT PANEL ================= */}
+      <div>
+        {/* Tabs */}
+        <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
           <button onClick={() => setActiveTab("category")}>Category</button>
-          <button onClick={() => setActiveTab("recent")} style={{ marginLeft: 8 }}>
-            Recent
-          </button>
+          <button onClick={() => setActiveTab("recent")}>Recent</button>
         </div>
 
         {activeTab === "category" && (
-          <>
-            <label>Category *</label>
-            <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
-              <option value="">Select</option>
-              {categories.map((c) => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </select>
-
-            <label>Subcategory *</label>
-            <select value={subcategoryId} onChange={(e) => setSubcategoryId(e.target.value)}>
-              <option value="">Select</option>
-              {subcategories
-                .filter((s) => s.category_id === categoryId)
-                .map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name} — {s.supplier_name}
-                  </option>
+          <div style={{ display: "grid", gap: 14 }}>
+            <Field label="Category *">
+              <select
+                value={categoryId}
+                onChange={(e) => {
+                  setCategoryId(e.target.value);
+                  setSubcategoryId("");
+                }}
+              >
+                <option value="">Select</option>
+                {categories.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
                 ))}
-            </select>
+              </select>
+            </Field>
 
-            <label>Brand *</label>
-            <input value={brand} onChange={(e) => setBrand(e.target.value)} />
+            <Field label="Subcategory *">
+              <select
+                value={subcategoryId}
+                onChange={(e) => setSubcategoryId(e.target.value)}
+              >
+                <option value="">Select</option>
+                {subcategories
+                  .filter((s) => s.category_id === categoryId)
+                  .map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name} — {s.supplier_name}
+                    </option>
+                  ))}
+              </select>
+            </Field>
 
-            <label>Model</label>
-            <input value={model} onChange={(e) => setModel(e.target.value)} />
+            <Field label="Brand *">
+              <input value={brand} onChange={(e) => setBrand(e.target.value)} />
+            </Field>
 
-            <label>Sell Price *</label>
-            <input value={sellPrice} onChange={(e) => setSellPrice(e.target.value)} />
-          </>
+            <Field label="Model">
+              <input value={model} onChange={(e) => setModel(e.target.value)} />
+            </Field>
+
+            <Field label="Sell Price *">
+              <input
+                value={sellPrice}
+                onChange={(e) => setSellPrice(e.target.value)}
+              />
+            </Field>
+          </div>
         )}
 
         {activeTab === "recent" && (
-          <div style={{ fontSize: 12 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             {recent.map((r, i) => (
               <div
                 key={i}
-                style={{ padding: 8, borderBottom: "1px solid #ddd", cursor: "pointer" }}
+                style={{ border: "1px solid #ddd", padding: 10, cursor: "pointer" }}
                 onClick={() => {
                   setCategoryId(r.category_id || "");
-                  const key = `${r.subcategory_name}|${r.supplier_name}`;
-                  setSubcategoryId(subcategoryByKey.get(key) || "");
+                  const sc = subcategories.find(
+                    (s) =>
+                      s.name === r.subcategory_name &&
+                      s.supplier_name === r.supplier_name
+                  );
+                  setSubcategoryId(sc?.id || "");
                   setBrand(r.name);
                   setModel(r.model || "");
                   setSellPrice(r.sell_price ? String(r.sell_price) : "");
@@ -281,9 +298,7 @@ export default function InventoryCountDesktop() {
               >
                 <strong>{r.name}</strong>
                 <div>{r.category_name} / {r.subcategory_name}</div>
-                <div>
-                  Size: {r.size || "-"} | Flavor: {r.flavor || "-"} | Nic: {r.Nicotine ?? "-"}
-                </div>
+                <div>Flavor: {r.flavor || "-"} | Nic: {r.Nicotine ?? "-"}</div>
                 <div>Qty: {r.quantity} | ${r.sell_price}</div>
               </div>
             ))}
@@ -291,15 +306,15 @@ export default function InventoryCountDesktop() {
         )}
       </div>
 
-      {/* RIGHT PANEL */}
-      <div style={{ flex: 1 }}>
+      {/* ================= RIGHT PANEL ================= */}
+      <div>
         <div
           style={{
             display: "grid",
             gridTemplateColumns: "2fr 1fr 1.5fr 1fr 1fr",
             gap: 8,
-            marginBottom: 8,
             fontWeight: 600,
+            marginBottom: 6,
           }}
         >
           <div>Barcode</div>
@@ -321,11 +336,10 @@ export default function InventoryCountDesktop() {
           >
             <input
               ref={(el) => {
-  barcodeRefs.current[i] = el;
-}}
+                barcodeRefs.current[i] = el;
+              }}
               value={row.barcode}
               onChange={(e) => handleBarcodeScan(i, e.target.value)}
-              placeholder="Scan barcode"
             />
             <input value={row.currentQty ?? ""} disabled />
             <input
@@ -359,6 +373,23 @@ export default function InventoryCountDesktop() {
           Save All
         </button>
       </div>
+    </div>
+  );
+}
+
+/* ================= FIELD WRAPPER ================= */
+
+function Field({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+      <label style={{ fontWeight: 600 }}>{label}</label>
+      {children}
     </div>
   );
 }
