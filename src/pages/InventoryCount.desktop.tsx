@@ -42,9 +42,8 @@ type RecentProduct = {
 export default function InventoryCountDesktop() {
   const barcodeRefs = useRef<Array<HTMLInputElement | null>>([]);
 
-  /* LEFT PANEL STATE */
+  /* LEFT PANEL */
   const [activeTab, setActiveTab] = useState<"category" | "recent">("category");
-
   const [categoryId, setCategoryId] = useState("");
   const [subcategoryId, setSubcategoryId] = useState("");
   const [brand, setBrand] = useState("");
@@ -67,14 +66,20 @@ export default function InventoryCountDesktop() {
   const [recent, setRecent] = useState<RecentProduct[]>([]);
   const [loading, setLoading] = useState(false);
 
-  const subcategoryById = useMemo(
-    () => new Map(subcategories.map((s) => [s.id, s])),
-    [subcategories]
-  );
-
   const categoryById = useMemo(
     () => new Map(categories.map((c) => [c.id, c])),
     [categories]
+  );
+
+  const subcategoryByKey = useMemo(
+    () =>
+      new Map(
+        subcategories.map((s) => [
+          `${s.name}|${s.supplier_name}`,
+          s.id,
+        ])
+      ),
+    [subcategories]
   );
 
   /* ================= LOAD DATA ================= */
@@ -100,8 +105,7 @@ export default function InventoryCountDesktop() {
   async function loadRecent() {
     const { data } = await supabase
       .from("products")
-      .select(
-        `
+      .select(`
         category_id,
         category_name,
         subcategory_name,
@@ -113,8 +117,7 @@ export default function InventoryCountDesktop() {
         Nicotine,
         quantity,
         sell_price
-      `
-      )
+      `)
       .eq("tenant_id", TENANT_ID)
       .order("updated_at", { ascending: false })
       .limit(15);
@@ -122,14 +125,12 @@ export default function InventoryCountDesktop() {
     setRecent(data || []);
   }
 
-  /* ================= BARCODE LOOKUP ================= */
+  /* ================= BARCODE SCAN ================= */
 
   async function handleBarcodeScan(index: number, barcode: string) {
-    setRows((prev) => {
-      const next = [...prev];
-      next[index] = { ...next[index], barcode };
-      return next;
-    });
+    const updated = [...rows];
+    updated[index].barcode = barcode;
+    setRows(updated);
 
     if (!barcode) return;
 
@@ -140,22 +141,17 @@ export default function InventoryCountDesktop() {
       .eq("barcode", barcode)
       .maybeSingle();
 
-    setRows((prev) => {
-      const next = [...prev];
-      next[index] = {
-        ...next[index],
-        currentQty: data ? data.quantity ?? 0 : 0,
-        flavor: data?.flavor ?? "",
-        nicotine:
-          data?.Nicotine === null || data?.Nicotine === undefined
-            ? ""
-            : String(data.Nicotine),
-      };
-      return next;
-    });
+    updated[index].currentQty = data?.quantity ?? 0;
+    updated[index].flavor = data?.flavor ?? "";
+    updated[index].nicotine =
+      data?.Nicotine !== null && data?.Nicotine !== undefined
+        ? String(data.Nicotine)
+        : "";
+
+    setRows([...updated]);
   }
 
-  /* ================= SAVE ALL ================= */
+  /* ================= SAVE ================= */
 
   async function saveAll() {
     if (!categoryId || !subcategoryId || !brand || !sellPrice) {
@@ -163,7 +159,7 @@ export default function InventoryCountDesktop() {
       return;
     }
 
-    const sc = subcategoryById.get(subcategoryId);
+    const sc = subcategories.find((s) => s.id === subcategoryId);
     if (!sc) return;
 
     setLoading(true);
@@ -180,7 +176,7 @@ export default function InventoryCountDesktop() {
         .eq("barcode", row.barcode)
         .maybeSingle();
 
-      const categoryName = categoryById.get(categoryId)?.name || null;
+      const categoryName = categoryById.get(categoryId)?.name ?? null;
 
       if (!existing?.id) {
         await supabase.from("products").insert({
@@ -198,13 +194,11 @@ export default function InventoryCountDesktop() {
           quantity: qtyToAdd,
           is_active: true,
         });
-      } else {
-        if (qtyToAdd > 0) {
-          await supabase
-            .from("products")
-            .update({ quantity: (existing.quantity ?? 0) + qtyToAdd })
-            .eq("id", existing.id);
-        }
+      } else if (qtyToAdd > 0) {
+        await supabase
+          .from("products")
+          .update({ quantity: (existing.quantity ?? 0) + qtyToAdd })
+          .eq("id", existing.id);
       }
     }
 
@@ -225,55 +219,29 @@ export default function InventoryCountDesktop() {
 
   /* ================= UI ================= */
 
-  const label = { fontSize: 13, fontWeight: 600, marginBottom: 4 };
-  const input = {
-    width: "100%",
-    padding: 10,
-    borderRadius: 8,
-    border: "1px solid #d1d5db",
-  };
-
   return (
-    <div style={{ display: "flex", gap: 20, padding: 20 }}>
+    <div style={{ display: "flex", gap: 24, padding: 24 }}>
       {/* LEFT PANEL */}
       <div style={{ width: 360 }}>
-        <div style={{ marginBottom: 10 }}>
-          <button onClick={() => setActiveTab("category")}>
-            Category
-          </button>
-          <button
-            onClick={() => setActiveTab("recent")}
-            style={{ marginLeft: 8 }}
-          >
+        <div style={{ marginBottom: 12 }}>
+          <button onClick={() => setActiveTab("category")}>Category</button>
+          <button onClick={() => setActiveTab("recent")} style={{ marginLeft: 8 }}>
             Recent
           </button>
         </div>
 
         {activeTab === "category" && (
           <>
-            <div style={label}>Category *</div>
-            <select
-              value={categoryId}
-              onChange={(e) => {
-                setCategoryId(e.target.value);
-                setSubcategoryId("");
-              }}
-              style={input}
-            >
+            <label>Category *</label>
+            <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
               <option value="">Select</option>
               {categories.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
+                <option key={c.id} value={c.id}>{c.name}</option>
               ))}
             </select>
 
-            <div style={label}>Subcategory *</div>
-            <select
-              value={subcategoryId}
-              onChange={(e) => setSubcategoryId(e.target.value)}
-              style={input}
-            >
+            <label>Subcategory *</label>
+            <select value={subcategoryId} onChange={(e) => setSubcategoryId(e.target.value)}>
               <option value="">Select</option>
               {subcategories
                 .filter((s) => s.category_id === categoryId)
@@ -284,14 +252,14 @@ export default function InventoryCountDesktop() {
                 ))}
             </select>
 
-            <div style={label}>Brand *</div>
-            <input value={brand} onChange={(e) => setBrand(e.target.value)} style={input} />
+            <label>Brand *</label>
+            <input value={brand} onChange={(e) => setBrand(e.target.value)} />
 
-            <div style={label}>Model</div>
-            <input value={model} onChange={(e) => setModel(e.target.value)} style={input} />
+            <label>Model</label>
+            <input value={model} onChange={(e) => setModel(e.target.value)} />
 
-            <div style={label}>Sell Price *</div>
-            <input value={sellPrice} onChange={(e) => setSellPrice(e.target.value)} style={input} />
+            <label>Sell Price *</label>
+            <input value={sellPrice} onChange={(e) => setSellPrice(e.target.value)} />
           </>
         )}
 
@@ -300,19 +268,11 @@ export default function InventoryCountDesktop() {
             {recent.map((r, i) => (
               <div
                 key={i}
-                style={{
-                  padding: 8,
-                  borderBottom: "1px solid #e5e7eb",
-                  cursor: "pointer",
-                }}
+                style={{ padding: 8, borderBottom: "1px solid #ddd", cursor: "pointer" }}
                 onClick={() => {
                   setCategoryId(r.category_id || "");
-                  const sc = subcategories.find(
-                    (s) =>
-                      s.name === r.subcategory_name &&
-                      s.supplier_name === r.supplier_name
-                  );
-                  setSubcategoryId(sc?.id || "");
+                  const key = `${r.subcategory_name}|${r.supplier_name}`;
+                  setSubcategoryId(subcategoryByKey.get(key) || "");
                   setBrand(r.name);
                   setModel(r.model || "");
                   setSellPrice(r.sell_price ? String(r.sell_price) : "");
@@ -320,15 +280,11 @@ export default function InventoryCountDesktop() {
                 }}
               >
                 <strong>{r.name}</strong>
+                <div>{r.category_name} / {r.subcategory_name}</div>
                 <div>
-                  {r.category_name} / {r.subcategory_name}
+                  Size: {r.size || "-"} | Flavor: {r.flavor || "-"} | Nic: {r.Nicotine ?? "-"}
                 </div>
-                <div>
-                  {r.size} {r.flavor} {r.Nicotine ? `${r.Nicotine}mg` : ""}
-                </div>
-                <div>
-                  Qty: {r.quantity} | ${r.sell_price}
-                </div>
+                <div>Qty: {r.quantity} | ${r.sell_price}</div>
               </div>
             ))}
           </div>
@@ -337,20 +293,69 @@ export default function InventoryCountDesktop() {
 
       {/* RIGHT PANEL */}
       <div style={{ flex: 1 }}>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "2fr 1fr 1.5fr 1fr 1fr",
+            gap: 8,
+            marginBottom: 8,
+            fontWeight: 600,
+          }}
+        >
+          <div>Barcode</div>
+          <div>In Stock</div>
+          <div>Flavor</div>
+          <div>Nic</div>
+          <div>Add Qty</div>
+        </div>
+
         {rows.map((row, i) => (
-          <input
+          <div
             key={i}
-            ref={(el) => {
-              barcodeRefs.current[i] = el;
+            style={{
+              display: "grid",
+              gridTemplateColumns: "2fr 1fr 1.5fr 1fr 1fr",
+              gap: 8,
+              marginBottom: 6,
             }}
-            placeholder="Barcode"
-            value={row.barcode}
-            onChange={(e) => handleBarcodeScan(i, e.target.value)}
-            style={input}
-          />
+          >
+            <input
+              ref={(el) => {
+  barcodeRefs.current[i] = el;
+}}
+              value={row.barcode}
+              onChange={(e) => handleBarcodeScan(i, e.target.value)}
+              placeholder="Scan barcode"
+            />
+            <input value={row.currentQty ?? ""} disabled />
+            <input
+              value={row.flavor}
+              onChange={(e) => {
+                const next = [...rows];
+                next[i].flavor = e.target.value;
+                setRows(next);
+              }}
+            />
+            <input
+              value={row.nicotine}
+              onChange={(e) => {
+                const next = [...rows];
+                next[i].nicotine = e.target.value;
+                setRows(next);
+              }}
+            />
+            <input
+              value={row.qty}
+              onChange={(e) => {
+                const next = [...rows];
+                next[i].qty = e.target.value;
+                setRows(next);
+              }}
+            />
+          </div>
         ))}
 
-        <button onClick={saveAll} disabled={loading}>
+        <button onClick={saveAll} disabled={loading} style={{ marginTop: 12 }}>
           Save All
         </button>
       </div>
