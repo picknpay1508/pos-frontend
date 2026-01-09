@@ -1,0 +1,46 @@
+name: Critical Rules Enforcement
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize]
+
+jobs:
+  enforce:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Ensure Step-2 approval exists
+        run: |
+          BODY="${{ github.event.pull_request.body }}"
+
+          echo "$BODY" | grep -q "Approved. Proceed." || {
+            echo "❌ Step-2 approval missing."
+            exit 1
+          }
+
+      - name: Block CRITICAL-RULES modification
+        run: |
+          git fetch origin ${{ github.base_ref }}
+          git diff --name-only origin/${{ github.base_ref }} | grep -q "CRITICAL-RULES.md" && {
+            echo "❌ CRITICAL-RULES.md must not be modified."
+            exit 1
+          } || true
+
+      - name: Block unapproved database changes
+        run: |
+          git diff --name-only origin/${{ github.base_ref }} | grep -E "supabase/migrations|schema.sql|db/" && {
+            echo "❌ Database changes detected without approval."
+            exit 1
+          } || true
+
+      - name: Ensure PR template compliance
+        run: |
+          BODY="${{ github.event.pull_request.body }}"
+
+          echo "$BODY" | grep -q "\- \[x\] YES" || {
+            echo "❌ Approval checkbox not checked."
+            exit 1
+          }
